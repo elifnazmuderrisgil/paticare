@@ -13,17 +13,6 @@ const appointmentTimes = Array.from({ length: 19 }, (_, index) => {
   return `${hour}:${minute}`;
 });
 
-const cityOptions = [
-  "İstanbul",
-  "Ankara",
-  "İzmir",
-  "Gaziantep",
-  "Mersin",
-  "Adana",
-  "Antalya",
-  "Eskişehir",
-];
-
 const districtOptions = {
   İstanbul: ["Kadıköy", "Beşiktaş", "Üsküdar"],
   Ankara: ["Çankaya", "Keçiören", "Yenimahalle"],
@@ -115,7 +104,7 @@ function uniqueClinics(clinics) {
 
 function getInitialAppointmentForm(pendingAppointment) {
   return {
-    city: pendingAppointment?.city || "",
+    city_id: pendingAppointment?.city_id ? String(pendingAppointment.city_id) : "",
     district: pendingAppointment?.district || "",
     veterinarian_id: pendingAppointment?.veterinarian_id
       ? String(pendingAppointment.veterinarian_id)
@@ -132,7 +121,7 @@ function getApiErrorMessage(error, fallbackMessage) {
   const detail = error.response?.data?.detail;
 
   if (typeof detail === "string" && detail.toLocaleLowerCase("tr-TR").includes("dolu")) {
-    return "Bu saat için seçilen klinikte uygunluk yok.";
+    return "Bu saat dolu, lütfen başka saat seçin.";
   }
 
   return detail || fallbackMessage;
@@ -142,8 +131,10 @@ function CustomerDashboard() {
   const initialPendingAppointment = getPendingAppointment();
   const [pets, setPets] = useState([]);
   const [appointments, setAppointments] = useState([]);
+  const [cities, setCities] = useState([]);
   const [services, setServices] = useState([]);
   const [availableClinics, setAvailableClinics] = useState([]);
+  const [availableTimes, setAvailableTimes] = useState([]);
   const [pendingAppointment, setPendingAppointment] = useState(initialPendingAppointment);
   const [appointmentForm, setAppointmentForm] = useState(() =>
     getInitialAppointmentForm(initialPendingAppointment)
@@ -158,7 +149,8 @@ function CustomerDashboard() {
   const navigate = useNavigate();
 
   const availableBreeds = breedOptions[newPet.species] || ["Diğer"];
-  const availableDistricts = districtOptions[appointmentForm.city] || [];
+  const selectedCity = cities.find((city) => String(city.id) === String(appointmentForm.city_id));
+  const availableDistricts = districtOptions[selectedCity?.name] || [];
 
   const selectedAppointmentDetails = useMemo(() => {
     if (!pendingAppointment) return [];
@@ -223,8 +215,9 @@ function CustomerDashboard() {
     setAppointmentForm((currentForm) => ({
       ...currentForm,
       [name]: value,
-      ...(name === "city" ? { district: "", veterinarian_id: "" } : {}),
-      ...(name === "district" ? { veterinarian_id: "" } : {}),
+      ...(name === "city_id" ? { district: "", veterinarian_id: "", appointment_time: "" } : {}),
+      ...(name === "district" ? { veterinarian_id: "", appointment_time: "" } : {}),
+      ...(["veterinarian_id", "appointment_date"].includes(name) ? { appointment_time: "" } : {}),
     }));
     setSuccessMessage("");
     setPageError("");
@@ -266,12 +259,18 @@ function CustomerDashboard() {
       return;
     }
 
+    const selectedTime = availableTimes.find((timeOption) => timeOption.time === appointmentForm.appointment_time);
+    if (!pendingAppointment && selectedTime && !selectedTime.available) {
+      setPageError("Bu saat dolu, lütfen başka saat seçin.");
+      return;
+    }
+
     if (
       !appointmentForm.veterinarian_id ||
       !appointmentForm.service_id ||
       !appointmentForm.appointment_date ||
       !appointmentForm.appointment_time ||
-      (!pendingAppointment && !appointmentForm.city)
+      (!pendingAppointment && !appointmentForm.city_id)
     ) {
       setPageError("Lütfen klinik, hizmet, tarih ve saat alanlarını doldurun.");
       return;
@@ -337,6 +336,11 @@ function CustomerDashboard() {
     refreshCustomerData();
 
     axios
+      .get(`${API_BASE_URL}/cities`)
+      .then((response) => setCities(response.data))
+      .catch((error) => console.error(error));
+
+    axios
       .get(`${API_BASE_URL}/services`)
       .then((response) => setServices(response.data))
       .catch((error) => console.error(error));
@@ -349,13 +353,13 @@ function CustomerDashboard() {
   }, [pets, selectedPetId]);
 
   useEffect(() => {
-    if (pendingAppointment || !appointmentForm.city) {
+    if (pendingAppointment || !appointmentForm.city_id) {
       setAvailableClinics([]);
       return;
     }
 
     const params = new URLSearchParams();
-    ["city", "district", "service_id", "appointment_date", "appointment_time"].forEach((key) => {
+    ["city_id", "district", "service_id", "appointment_date", "appointment_time"].forEach((key) => {
       if (appointmentForm[key]) {
         params.append(key, appointmentForm[key]);
       }
@@ -371,9 +375,40 @@ function CustomerDashboard() {
         setAvailableClinics([]);
       });
   }, [
-    appointmentForm.city,
+    appointmentForm.city_id,
     appointmentForm.district,
     appointmentForm.service_id,
+    appointmentForm.appointment_date,
+    appointmentForm.appointment_time,
+    pendingAppointment,
+  ]);
+
+  useEffect(() => {
+    if (pendingAppointment || !appointmentForm.veterinarian_id || !appointmentForm.appointment_date) {
+      setAvailableTimes([]);
+      return;
+    }
+
+    axios
+      .get(
+        `${API_BASE_URL}/veterinarians/${appointmentForm.veterinarian_id}/available-times?date=${appointmentForm.appointment_date}`
+      )
+      .then((response) => {
+        setAvailableTimes(response.data);
+        const selectedTime = response.data.find(
+          (timeOption) => timeOption.time === appointmentForm.appointment_time
+        );
+
+        if (selectedTime && !selectedTime.available) {
+          setPageError("Bu saat dolu, lütfen başka saat seçin.");
+        }
+      })
+      .catch((error) => {
+        console.error(error);
+        setAvailableTimes([]);
+      });
+  }, [
+    appointmentForm.veterinarian_id,
     appointmentForm.appointment_date,
     appointmentForm.appointment_time,
     pendingAppointment,
@@ -420,15 +455,15 @@ function CustomerDashboard() {
                 <label>
                   Şehir
                   <select
-                    name="city"
-                    value={appointmentForm.city}
+                    name="city_id"
+                    value={appointmentForm.city_id}
                     onChange={handleAppointmentFieldChange}
                     required
                   >
                     <option value="">Şehir seçin</option>
-                    {cityOptions.map((city) => (
-                      <option key={city} value={city}>
-                        {city}
+                    {cities.map((city) => (
+                      <option key={city.id} value={city.id}>
+                        {city.name}
                       </option>
                     ))}
                   </select>
@@ -440,7 +475,7 @@ function CustomerDashboard() {
                     name="district"
                     value={appointmentForm.district}
                     onChange={handleAppointmentFieldChange}
-                    disabled={!appointmentForm.city}
+                    disabled={!appointmentForm.city_id}
                   >
                     <option value="">Tüm ilçeler</option>
                     {availableDistricts.map((district) => (
@@ -457,7 +492,7 @@ function CustomerDashboard() {
                     name="veterinarian_id"
                     value={appointmentForm.veterinarian_id}
                     onChange={handleAppointmentFieldChange}
-                    disabled={!appointmentForm.city}
+                    disabled={!appointmentForm.city_id}
                     required
                   >
                     <option value="">Klinik seçin</option>
@@ -508,13 +543,21 @@ function CustomerDashboard() {
                     onChange={handleAppointmentFieldChange}
                     required
                   >
-                    <option value="">Saat seçin</option>
-                    {appointmentTimes.map((time) => (
-                      <option key={time} value={time}>
-                        {time}
-                      </option>
-                    ))}
-                  </select>
+                  <option value="">Saat seçin</option>
+                  {(availableTimes.length > 0
+                    ? availableTimes
+                    : appointmentTimes.map((time) => ({ time, available: true }))
+                  ).map((timeOption) => (
+                    <option
+                      key={timeOption.time}
+                      value={timeOption.time}
+                      disabled={!timeOption.available}
+                    >
+                      {timeOption.time}
+                      {!timeOption.available ? " - Dolu" : ""}
+                    </option>
+                  ))}
+                </select>
                 </label>
               </div>
             )}

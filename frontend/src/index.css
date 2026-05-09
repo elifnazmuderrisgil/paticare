@@ -257,7 +257,8 @@ button {
     #eef4fb;
 }
 
-.dashboard-layout.vet-dashboard {
+.vet-dashboard {
+  min-height: 100vh;
   background:
     radial-gradient(circle at 18% 12%, rgba(45, 212, 191, 0.18), transparent 30%),
     linear-gradient(135deg, #f8fbff 0%, #edf6ff 46%, #f3fbf7 100%);
@@ -395,9 +396,9 @@ button {
 }
 
 .vet-main {
-  width: min(100%, 1160px);
+  width: min(100%, 1280px);
   margin: 0 auto;
-  padding: 36px;
+  padding: 32px 28px 44px;
 }
 
 .dashboard-header {
@@ -418,7 +419,7 @@ button {
 .vet-header {
   padding: 22px 24px;
   border: 1px solid rgba(203, 217, 234, 0.8);
-  border-radius: 22px;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.76);
   box-shadow: 0 20px 48px rgba(28, 64, 112, 0.09);
   backdrop-filter: blur(16px);
@@ -904,13 +905,60 @@ button:disabled {
   background: rgba(255, 255, 255, 0.94);
 }
 
+.vet-create-panel {
+  margin-bottom: 20px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.vet-create-form {
+  display: grid;
+  gap: 14px;
+}
+
+.vet-create-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .vet-appointment-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
   background: #ffffff;
+}
+
+.vet-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.vet-tabs button {
+  min-height: 38px;
+  margin-top: 0;
+  border: 1px solid #cbd9ea;
+  background: #f8fbff;
+  color: #334155;
+  box-shadow: none;
+}
+
+.vet-tabs button.active {
+  border-color: #2f80ed;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.vet-appointment-grid {
+  grid-template-columns: 1.1fr 1fr 0.9fr 0.9fr 1fr 0.85fr 0.75fr;
+}
+
+.vet-appointment-grid p {
+  min-height: 64px;
 }
 
 .vet-appointment-actions {
   display: grid;
-  grid-template-columns: minmax(140px, 180px) auto auto;
+  grid-template-columns: repeat(3, minmax(140px, 1fr)) auto auto;
   gap: 10px;
   align-items: end;
   margin-top: 14px;

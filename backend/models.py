@@ -30,10 +30,18 @@ class Veterinarian(Base):
     specialty = Column(String)
     phone = Column(String)
     email = Column(String)
+    password = Column(String)
     clinic_name = Column(String)
+    city_id = Column(Integer, ForeignKey("cities.id"))
     city = Column(String)
     district = Column(String)
     address = Column(String)
+
+class City(Base):
+    __tablename__ = "cities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False)
 
 class Service(Base):
     __tablename__ = "services"
@@ -53,13 +61,3 @@ class Appointment(Base):
     appointment_date = Column(Date)
     appointment_time = Column(Time)
     status = Column(String)
-
-class Vaccination(Base):
-    __tablename__ = "vaccinations"
-
-    id = Column(Integer, primary_key=True, index=True)
-    pet_id = Column(Integer, ForeignKey("pets.id"))
-    vaccine_name = Column(String)
-    vaccination_date = Column(Date)
-    next_due_date = Column(Date)
-    notes = Column(String)

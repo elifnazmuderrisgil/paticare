@@ -11,17 +11,6 @@ const appointmentTimes = Array.from({ length: 19 }, (_, index) => {
   return `${hour}:${minute}`;
 });
 
-const cityOptions = [
-  "İstanbul",
-  "Ankara",
-  "İzmir",
-  "Gaziantep",
-  "Mersin",
-  "Adana",
-  "Antalya",
-  "Eskişehir",
-];
-
 const districtOptions = {
   İstanbul: ["Kadıköy", "Beşiktaş", "Üsküdar"],
   Ankara: ["Çankaya", "Keçiören", "Yenimahalle"],
@@ -34,7 +23,7 @@ const districtOptions = {
 };
 
 const initialFilters = {
-  city: "",
+  city_id: "",
   district: "",
   service_id: "",
   appointment_date: "",
@@ -64,6 +53,7 @@ function uniqueClinics(clinics) {
 
 function LandingPage() {
   const [filters, setFilters] = useState(initialFilters);
+  const [cities, setCities] = useState([]);
   const [services, setServices] = useState([]);
   const [clinics, setClinics] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -71,12 +61,17 @@ function LandingPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    axios
-      .get(`${API_BASE_URL}/services`)
-      .then((response) => setServices(response.data))
+    Promise.all([
+      axios.get(`${API_BASE_URL}/cities`),
+      axios.get(`${API_BASE_URL}/services`),
+    ])
+      .then(([citiesResponse, servicesResponse]) => {
+        setCities(citiesResponse.data);
+        setServices(servicesResponse.data);
+      })
       .catch((error) => {
         console.error(error);
-        setSearchMessage("Hizmet listesi alınırken bir hata oluştu.");
+        setSearchMessage("Şehir veya hizmet listesi alınırken bir hata oluştu.");
       });
   }, []);
 
@@ -101,7 +96,7 @@ function LandingPage() {
     setFilters((currentFilters) => ({
       ...currentFilters,
       [name]: value,
-      ...(name === "city" ? { district: "" } : {}),
+      ...(name === "city_id" ? { district: "" } : {}),
     }));
     setSearchMessage("");
   };
@@ -110,7 +105,7 @@ function LandingPage() {
     event.preventDefault();
     setSearchMessage("");
 
-    if (!filters.city || !filters.service_id || !filters.appointment_date || !filters.appointment_time) {
+    if (!filters.city_id || !filters.service_id || !filters.appointment_date || !filters.appointment_time) {
       setSearchMessage("Klinik aramak için şehir, hizmet, tarih ve saat seçin.");
       return;
     }
@@ -157,7 +152,8 @@ function LandingPage() {
         veterinarian_id: clinic.id,
         veterinarian_name: clinic.full_name,
         clinic_name: clinic.clinic_name,
-        city: clinic.city,
+        city_id: clinic.city_id,
+        city: clinic.city_name || clinic.city,
         district: clinic.district,
         address: clinic.address,
         service_id: Number(filters.service_id),
@@ -169,7 +165,8 @@ function LandingPage() {
     routeToAppointment();
   };
 
-  const availableDistricts = districtOptions[filters.city] || [];
+  const selectedCity = cities.find((city) => String(city.id) === String(filters.city_id));
+  const availableDistricts = districtOptions[selectedCity?.name] || [];
 
   return (
     <main className="landing-page">
@@ -211,11 +208,11 @@ function LandingPage() {
             <div className="form-grid filter-grid">
               <label>
                 Şehir
-                <select name="city" value={filters.city} onChange={handleFilterChange} required>
+                <select name="city_id" value={filters.city_id} onChange={handleFilterChange} required>
                   <option value="">Şehir seçin</option>
-                  {cityOptions.map((city) => (
-                    <option key={city} value={city}>
-                      {city}
+                  {cities.map((city) => (
+                    <option key={city.id} value={city.id}>
+                      {city.name}
                     </option>
                   ))}
                 </select>
@@ -227,7 +224,7 @@ function LandingPage() {
                   name="district"
                   value={filters.district}
                   onChange={handleFilterChange}
-                  disabled={!filters.city}
+                  disabled={!filters.city_id}
                 >
                   <option value="">Tüm ilçeler</option>
                   {availableDistricts.map((district) => (
@@ -294,7 +291,7 @@ function LandingPage() {
                   <div>
                     <h3>{clinic.clinic_name || clinic.full_name}</h3>
                     <p>{clinic.full_name}</p>
-                    <p>{clinic.city || "-"} / {clinic.district || "-"}</p>
+                    <p>{clinic.city_name || clinic.city || "-"} / {clinic.district || "-"}</p>
                     <p>{clinic.address || "Adres bilgisi yok."}</p>
                   </div>
                   <button

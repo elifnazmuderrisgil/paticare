@@ -45,12 +45,21 @@ class ServiceResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class CityResponse(BaseModel):
+    id: int
+    name: str
+
+    class Config:
+        from_attributes = True
+
 class VeterinarianResponse(BaseModel):
     id: int
     full_name: str
     email: str | None = None
     phone: str | None = None
     clinic_name: str | None = None
+    city_id: int | None = None
+    city_name: str | None = None
     city: str | None = None
     district: str | None = None
     address: str | None = None
@@ -73,6 +82,12 @@ class AppointmentResponse(AppointmentCreate):
     class Config:
         from_attributes = True
 
+class AppointmentStatsResponse(BaseModel):
+    total: int
+    pending: int
+    completed: int
+    cancelled: int
+
 class AppointmentDetailResponse(BaseModel):
     id: int
     user_id: int | None = None
@@ -84,6 +99,9 @@ class AppointmentDetailResponse(BaseModel):
     service_name: str | None = None
     veterinarian_name: str | None = None
     clinic_name: str | None = None
+    veterinarian_city_id: int | None = None
+    city_name: str | None = None
+    district: str | None = None
     veterinarian_city: str | None = None
     veterinarian_district: str | None = None
     veterinarian_address: str | None = None
@@ -109,7 +127,8 @@ class ClinicRegisterCreate(BaseModel):
     password: str
     phone: str
     clinic_name: str
-    city: str
+    city_id: int | None = None
+    city: str | None = None
     district: str
     address: str
 
@@ -119,31 +138,11 @@ class ClinicRegisterResponse(BaseModel):
     full_name: str
     email: str
     clinic_name: str
+    city_id: int | None = None
+    city_name: str | None = None
     city: str
     district: str
     address: str
 
 class VeterinarianAppointmentResponse(AppointmentDetailResponse):
     pass
-
-class VaccinationCreate(BaseModel):
-    pet_id: int
-    vaccine_name: str
-    vaccination_date: date
-    next_due_date: date
-    notes: str | None = None
-
-class VaccinationResponse(VaccinationCreate):
-    id: int
-
-    class Config:
-        from_attributes = True
-
-class VaccinationDetailResponse(BaseModel):
-    id: int
-    pet_id: int
-    pet_name: str | None = None
-    vaccine_name: str
-    vaccination_date: date
-    next_due_date: date
-    notes: str | None = None

@@ -9,6 +9,20 @@ import schemas
 
 app = FastAPI()
 
+ACTIVE_APPOINTMENT_STATUSES = ("Bekliyor", "Onaylandı")
+APPOINTMENT_STATUS_TRANSITIONS = {
+    "Bekliyor": {"Bekliyor", "Onaylandı", "Tamamlandı", "İptal"},
+    "Onaylandı": {"Onaylandı", "Tamamlandı", "İptal"},
+    "Tamamlandı": {"Tamamlandı"},
+    "İptal": {"İptal"},
+}
+APPOINTMENT_TIME_OPTIONS = [
+    time(hour, minute)
+    for hour in range(8, 18)
+    for minute in (0, 30)
+    if not (hour == 17 and minute == 30)
+]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -19,6 +33,29 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def get_city_name(veterinarian, city):
+    if city:
+        return city.name
+    if veterinarian:
+        return veterinarian.city
+    return None
+
+def veterinarian_response(veterinarian, city=None):
+    city_name = get_city_name(veterinarian, city)
+
+    return {
+        "id": veterinarian.id,
+        "full_name": veterinarian.full_name,
+        "email": veterinarian.email,
+        "phone": veterinarian.phone,
+        "clinic_name": veterinarian.clinic_name,
+        "city_id": veterinarian.city_id,
+        "city_name": city_name,
+        "city": city_name,
+        "district": veterinarian.district,
+        "address": veterinarian.address,
+    }
 
 def appointment_detail_rows(query):
     rows = query.all()
@@ -35,7 +72,10 @@ def appointment_detail_rows(query):
             "service_name": service.service_name if service else None,
             "veterinarian_name": veterinarian.full_name if veterinarian else None,
             "clinic_name": veterinarian.clinic_name if veterinarian else None,
-            "veterinarian_city": veterinarian.city if veterinarian else None,
+            "veterinarian_city_id": veterinarian.city_id if veterinarian else None,
+            "city_name": get_city_name(veterinarian, city),
+            "district": veterinarian.district if veterinarian else None,
+            "veterinarian_city": get_city_name(veterinarian, city),
             "veterinarian_district": veterinarian.district if veterinarian else None,
             "veterinarian_address": veterinarian.address if veterinarian else None,
             "customer_name": user.full_name if user else None,
@@ -44,7 +84,7 @@ def appointment_detail_rows(query):
             "appointment_time": appointment.appointment_time,
             "status": appointment.status,
         }
-        for appointment, pet, service, veterinarian, user in rows
+        for appointment, pet, service, veterinarian, user, city in rows
     ]
 
 def appointment_detail_query(db: Session):
@@ -55,6 +95,7 @@ def appointment_detail_query(db: Session):
             models.Service,
             models.Veterinarian,
             models.User,
+            models.City,
         )
         .outerjoin(models.Pet, models.Appointment.pet_id == models.Pet.id)
         .outerjoin(models.Service, models.Appointment.service_id == models.Service.id)
@@ -63,33 +104,76 @@ def appointment_detail_query(db: Session):
             models.Appointment.veterinarian_id == models.Veterinarian.id,
         )
         .outerjoin(models.User, models.Appointment.user_id == models.User.id)
+        .outerjoin(models.City, models.Veterinarian.city_id == models.City.id)
     )
 
 def is_past_appointment_datetime(appointment_date: date, appointment_time: time):
     appointment_datetime = datetime.combine(appointment_date, appointment_time)
     return appointment_datetime < datetime.now()
 
-def vaccination_detail_rows(query):
-    rows = query.all()
-
-    return [
-        {
-            "id": vaccination.id,
-            "pet_id": vaccination.pet_id,
-            "pet_name": pet.name if pet else None,
-            "vaccine_name": vaccination.vaccine_name,
-            "vaccination_date": vaccination.vaccination_date,
-            "next_due_date": vaccination.next_due_date,
-            "notes": vaccination.notes,
-        }
-        for vaccination, pet in rows
-    ]
-
-def vaccination_detail_query(db: Session):
-    return (
-        db.query(models.Vaccination, models.Pet)
-        .join(models.Pet, models.Vaccination.pet_id == models.Pet.id)
+def find_active_appointment_at_time(
+    db: Session,
+    veterinarian_id: int,
+    appointment_date: date,
+    appointment_time: time,
+    excluded_appointment_id: int | None = None,
+):
+    query = db.query(models.Appointment).filter(
+        models.Appointment.veterinarian_id == veterinarian_id,
+        models.Appointment.appointment_date == appointment_date,
+        models.Appointment.appointment_time == appointment_time,
+        models.Appointment.status.in_(ACTIVE_APPOINTMENT_STATUSES),
     )
+
+    if excluded_appointment_id is not None:
+        query = query.filter(models.Appointment.id != excluded_appointment_id)
+
+    return query.first()
+
+def active_appointment_query(db: Session, veterinarian_id: int):
+    return db.query(models.Appointment).filter(
+        models.Appointment.veterinarian_id == veterinarian_id,
+        models.Appointment.appointment_date >= date.today(),
+        models.Appointment.status.in_(ACTIVE_APPOINTMENT_STATUSES),
+    )
+
+def validate_appointment_status_transition(current_status: str, next_status: str):
+    if current_status == next_status:
+        return
+
+    allowed_statuses = APPOINTMENT_STATUS_TRANSITIONS.get(
+        current_status,
+        {current_status},
+    )
+
+    if next_status in allowed_statuses:
+        return
+
+    if current_status == "Onaylandı" and next_status == "Bekliyor":
+        detail = "Onaylanan randevu tekrar bekliyor durumuna alınamaz."
+    elif current_status in ("Tamamlandı", "İptal"):
+        detail = "Tamamlanan veya iptal edilen randevunun durumu değiştirilemez."
+    else:
+        detail = "Geçersiz randevu durum geçişi."
+
+    raise HTTPException(status_code=400, detail=detail)
+
+def resolve_city(clinic: schemas.ClinicRegisterCreate, db: Session):
+    city = None
+
+    if clinic.city_id:
+        city = db.query(models.City).filter(models.City.id == clinic.city_id).first()
+    elif clinic.city:
+        city = (
+            db.query(models.City)
+            .filter(models.City.name == clinic.city.strip())
+            .first()
+        )
+
+    if not city:
+        raise HTTPException(status_code=400, detail="Geçerli bir şehir seçin.")
+
+    return city
 
 @app.get("/")
 def home():
@@ -117,6 +201,7 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
     user_data = user.model_dump()
     user_data["email"] = email
+    user_data["role"] = "customer"
 
     new_user = models.User(**user_data)
     db.add(new_user)
@@ -130,23 +215,59 @@ def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
     email = user.email.strip().lower()
     password = user.password.strip()
 
-    db_user = db.query(models.User).filter(
-        models.User.email == email
-    ).first()
+    db_user = (
+        db.query(models.User)
+        .filter(
+            models.User.email == email,
+            models.User.password == password,
+        )
+        .first()
+    )
 
-    if not db_user:
-        raise HTTPException(status_code=401, detail="Bu email ile kullanıcı bulunamadı")
+    if db_user:
+        if db_user.role == "veterinarian":
+            veterinarian = (
+                db.query(models.Veterinarian)
+                .filter(models.Veterinarian.email == email)
+                .first()
+            )
 
-    if db_user.password != password:
-        raise HTTPException(status_code=401, detail="Şifre hatalı")
+            if veterinarian:
+                return {
+                    "id": veterinarian.id,
+                    "full_name": veterinarian.full_name,
+                    "email": veterinarian.email,
+                    "role": "veterinarian",
+                    "clinic_name": veterinarian.clinic_name,
+                }
 
-    return {
-        "id": db_user.id,
-        "full_name": db_user.full_name,
-        "email": db_user.email,
-        "phone": db_user.phone,
-        "role": db_user.role or "customer"
-    }
+        return {
+            "id": db_user.id,
+            "full_name": db_user.full_name,
+            "email": db_user.email,
+            "phone": db_user.phone,
+            "role": db_user.role or "customer"
+        }
+
+    veterinarian = (
+        db.query(models.Veterinarian)
+        .filter(
+            models.Veterinarian.email == email,
+            models.Veterinarian.password == password,
+        )
+        .first()
+    )
+
+    if veterinarian:
+        return {
+            "id": veterinarian.id,
+            "full_name": veterinarian.full_name,
+            "email": veterinarian.email,
+            "role": "veterinarian",
+            "clinic_name": veterinarian.clinic_name,
+        }
+
+    raise HTTPException(status_code=401, detail="Email veya şifre hatalı")
 
 @app.post("/clinics/register", response_model=schemas.ClinicRegisterResponse)
 def register_clinic(
@@ -154,6 +275,7 @@ def register_clinic(
     db: Session = Depends(get_db),
 ):
     email = clinic.email.strip().lower()
+    city = resolve_city(clinic, db)
 
     existing_user = (
         db.query(models.User)
@@ -182,9 +304,11 @@ def register_clinic(
     new_veterinarian = models.Veterinarian(
         full_name=clinic.full_name,
         email=email,
+        password=clinic.password,
         phone=clinic.phone,
         clinic_name=clinic.clinic_name,
-        city=clinic.city,
+        city_id=city.id,
+        city=city.name,
         district=clinic.district,
         address=clinic.address,
     )
@@ -199,7 +323,9 @@ def register_clinic(
         "full_name": new_veterinarian.full_name,
         "email": new_veterinarian.email,
         "clinic_name": new_veterinarian.clinic_name,
-        "city": new_veterinarian.city,
+        "city_id": new_veterinarian.city_id,
+        "city_name": city.name,
+        "city": city.name,
         "district": new_veterinarian.district,
         "address": new_veterinarian.address,
     }
@@ -222,6 +348,15 @@ def debug_users(db: Session = Depends(get_db)):
 @app.get("/pets", response_model=list[schemas.PetResponse])
 def get_pets(db: Session = Depends(get_db)):
     return db.query(models.Pet).all()
+
+@app.get("/users/customers", response_model=list[schemas.UserResponse])
+def get_customers(db: Session = Depends(get_db)):
+    return (
+        db.query(models.User)
+        .filter(models.User.role == "customer")
+        .order_by(models.User.full_name.asc())
+        .all()
+    )
 
 @app.get("/users/{user_id}/pets", response_model=list[schemas.PetResponse])
 def get_user_pets(user_id: int, db: Session = Depends(get_db)):
@@ -250,68 +385,75 @@ def delete_pet(pet_id: int, db: Session = Depends(get_db)):
 
     return {"message": "Hayvan başarıyla silindi."}
 
-@app.get(
-    "/pets/{pet_id}/vaccinations",
-    response_model=list[schemas.VaccinationResponse],
-)
-def get_pet_vaccinations(pet_id: int, db: Session = Depends(get_db)):
-    return (
-        db.query(models.Vaccination)
-        .filter(models.Vaccination.pet_id == pet_id)
-        .order_by(models.Vaccination.next_due_date.asc())
-        .all()
-    )
-
-@app.post("/vaccinations", response_model=schemas.VaccinationResponse)
-def create_vaccination(
-    vaccination: schemas.VaccinationCreate,
-    db: Session = Depends(get_db),
-):
-    pet = db.query(models.Pet).filter(models.Pet.id == vaccination.pet_id).first()
-    if not pet:
-        raise HTTPException(status_code=404, detail="Hayvan bulunamadı.")
-
-    new_vaccination = models.Vaccination(**vaccination.model_dump())
-    db.add(new_vaccination)
-    db.commit()
-    db.refresh(new_vaccination)
-    return new_vaccination
-
-@app.get(
-    "/users/{user_id}/vaccinations",
-    response_model=list[schemas.VaccinationDetailResponse],
-)
-def get_user_vaccinations(user_id: int, db: Session = Depends(get_db)):
-    query = (
-        vaccination_detail_query(db)
-        .filter(models.Pet.user_id == user_id)
-        .order_by(models.Vaccination.next_due_date.asc())
-    )
-    return vaccination_detail_rows(query)
-
 @app.get("/services", response_model=list[schemas.ServiceResponse])
 def get_services(db: Session = Depends(get_db)):
-    return db.query(models.Service).all()
+    services = db.query(models.Service).order_by(models.Service.id.asc()).all()
+    seen_names = set()
+    unique_services = []
+
+    for service in services:
+        name_key = (service.service_name or "").strip().casefold()
+        if name_key in seen_names:
+            continue
+
+        seen_names.add(name_key)
+        unique_services.append(service)
+
+    return unique_services
+
+@app.get("/cities", response_model=list[schemas.CityResponse])
+def get_cities(db: Session = Depends(get_db)):
+    return db.query(models.City).order_by(models.City.name.asc()).all()
 
 @app.get("/veterinarians", response_model=list[schemas.VeterinarianResponse])
 def get_veterinarians(db: Session = Depends(get_db)):
-    return db.query(models.Veterinarian).all()
+    rows = (
+        db.query(models.Veterinarian, models.City)
+        .outerjoin(models.City, models.Veterinarian.city_id == models.City.id)
+        .order_by(
+            models.City.name.asc(),
+            models.Veterinarian.city.asc(),
+            models.Veterinarian.district.asc(),
+        )
+        .all()
+    )
+    return [veterinarian_response(veterinarian, city) for veterinarian, city in rows]
 
 @app.get("/veterinarians/by-email/{email}", response_model=schemas.VeterinarianResponse)
 def get_veterinarian_by_email(email: str, db: Session = Depends(get_db)):
-    veterinarian = (
-        db.query(models.Veterinarian)
+    row = (
+        db.query(models.Veterinarian, models.City)
+        .outerjoin(models.City, models.Veterinarian.city_id == models.City.id)
         .filter(models.Veterinarian.email == email.strip().lower())
         .first()
     )
 
-    if not veterinarian:
+    if not row:
         raise HTTPException(status_code=404, detail="Veteriner kaydı bulunamadı.")
 
-    return veterinarian
+    veterinarian, city = row
+    return veterinarian_response(veterinarian, city)
+
+@app.get("/veterinarians/{veterinarian_id}/customers", response_model=list[schemas.UserResponse])
+def get_veterinarian_customers(veterinarian_id: int, db: Session = Depends(get_db)):
+    customer_ids = (
+        db.query(models.Appointment.user_id)
+        .filter(models.Appointment.veterinarian_id == veterinarian_id)
+        .distinct()
+        .subquery()
+    )
+
+    return (
+        db.query(models.User)
+        .join(customer_ids, customer_ids.c.user_id == models.User.id)
+        .filter(models.User.role == "customer")
+        .order_by(models.User.full_name.asc())
+        .all()
+    )
 
 @app.get("/veterinarians/search", response_model=list[schemas.VeterinarianResponse])
 def search_veterinarians(
+    city_id: int | None = None,
     city: str | None = None,
     district: str | None = None,
     service_id: int | None = None,
@@ -319,9 +461,14 @@ def search_veterinarians(
     appointment_time: time | None = None,
     db: Session = Depends(get_db),
 ):
-    query = db.query(models.Veterinarian)
+    query = (
+        db.query(models.Veterinarian, models.City)
+        .outerjoin(models.City, models.Veterinarian.city_id == models.City.id)
+    )
 
-    if city:
+    if city_id:
+        query = query.filter(models.Veterinarian.city_id == city_id)
+    elif city:
         query = query.filter(models.Veterinarian.city == city)
 
     if district:
@@ -333,12 +480,21 @@ def search_veterinarians(
             .filter(
                 models.Appointment.appointment_date == appointment_date,
                 models.Appointment.appointment_time == appointment_time,
+                models.Appointment.status.in_(ACTIVE_APPOINTMENT_STATUSES),
             )
             .subquery()
         )
         query = query.filter(~models.Veterinarian.id.in_(booked_veterinarian_ids))
 
-    return query.order_by(models.Veterinarian.city, models.Veterinarian.district).all()
+    rows = (
+        query.order_by(
+            models.City.name.asc(),
+            models.Veterinarian.city.asc(),
+            models.Veterinarian.district.asc(),
+        )
+        .all()
+    )
+    return [veterinarian_response(veterinarian, city) for veterinarian, city in rows]
 
 @app.get("/appointments", response_model=list[schemas.AppointmentDetailResponse])
 def get_appointments(db: Session = Depends(get_db)):
@@ -392,19 +548,16 @@ def create_appointment(
     if not service:
         raise HTTPException(status_code=404, detail="Hizmet bulunamadı.")
 
-    existing_appointment = (
-        db.query(models.Appointment)
-        .filter(
-            models.Appointment.veterinarian_id == appointment.veterinarian_id,
-            models.Appointment.appointment_date == appointment.appointment_date,
-            models.Appointment.appointment_time == appointment.appointment_time,
-        )
-        .first()
+    existing_appointment = find_active_appointment_at_time(
+        db,
+        appointment.veterinarian_id,
+        appointment.appointment_date,
+        appointment.appointment_time,
     )
     if existing_appointment:
         raise HTTPException(
             status_code=400,
-            detail="Bu saat için seçilen klinikte uygunluk yok.",
+            detail="Bu saat için seçilen klinikte randevu dolu.",
         )
 
     new_appointment = models.Appointment(
@@ -447,6 +600,72 @@ def get_veterinarian_appointments(veterinarian_id: int, db: Session = Depends(ge
     )
     return appointment_detail_rows(query)
 
+@app.get(
+    "/veterinarians/{veterinarian_id}/appointment-stats",
+    response_model=schemas.AppointmentStatsResponse,
+)
+def get_veterinarian_appointment_stats(
+    veterinarian_id: int,
+    db: Session = Depends(get_db),
+):
+    active_query = active_appointment_query(db, veterinarian_id)
+
+    return {
+        "total": active_query.count(),
+        "pending": active_query.filter(models.Appointment.status == "Bekliyor").count(),
+        "completed": (
+            db.query(models.Appointment)
+            .filter(
+                models.Appointment.veterinarian_id == veterinarian_id,
+                models.Appointment.status == "Tamamlandı",
+            )
+            .count()
+        ),
+        "cancelled": (
+            db.query(models.Appointment)
+            .filter(
+                models.Appointment.veterinarian_id == veterinarian_id,
+                models.Appointment.status == "İptal",
+            )
+            .count()
+        ),
+    }
+
+@app.get("/veterinarians/{veterinarian_id}/available-times")
+def get_veterinarian_available_times(
+    veterinarian_id: int,
+    date: date,
+    db: Session = Depends(get_db),
+):
+    veterinarian = (
+        db.query(models.Veterinarian)
+        .filter(models.Veterinarian.id == veterinarian_id)
+        .first()
+    )
+    if not veterinarian:
+        raise HTTPException(status_code=404, detail="Veteriner bulunamadı.")
+
+    booked_times = {
+        appointment_time.strftime("%H:%M")
+        for (appointment_time,) in (
+            db.query(models.Appointment.appointment_time)
+            .filter(
+                models.Appointment.veterinarian_id == veterinarian_id,
+                models.Appointment.appointment_date == date,
+                models.Appointment.status.in_(ACTIVE_APPOINTMENT_STATUSES),
+            )
+            .all()
+        )
+    }
+
+    return [
+        {
+            "time": appointment_time.strftime("%H:%M"),
+            "available": appointment_time.strftime("%H:%M") not in booked_times,
+        }
+        for appointment_time in APPOINTMENT_TIME_OPTIONS
+    ]
+
 @app.delete("/appointments/{appointment_id}")
 def delete_appointment(appointment_id: int, db: Session = Depends(get_db)):
     appointment = (
@@ -477,6 +696,8 @@ def update_appointment_status(
 
     if not appointment:
         raise HTTPException(status_code=404, detail="Randevu bulunamadı.")
+
+    validate_appointment_status_transition(appointment.status, status_update.status)
 
     appointment.status = status_update.status
     db.commit()
@@ -537,21 +758,27 @@ def update_appointment(
         if not service:
             raise HTTPException(status_code=404, detail="Hizmet bulunamadı.")
 
-    existing_appointment = (
-        db.query(models.Appointment)
-        .filter(
-            models.Appointment.id != appointment_id,
-            models.Appointment.veterinarian_id == next_veterinarian_id,
-            models.Appointment.appointment_date == next_date,
-            models.Appointment.appointment_time == next_time,
-        )
-        .first()
+    next_status = update_data.get("status", appointment.status)
+    if "status" in update_data:
+        validate_appointment_status_transition(appointment.status, next_status)
+
+    should_check_availability = changes_schedule or (
+        "status" in update_data and next_status in ACTIVE_APPOINTMENT_STATUSES
     )
-    if existing_appointment:
-        raise HTTPException(
-            status_code=400,
-            detail="Bu saat için seçilen klinikte uygunluk yok.",
+
+    if should_check_availability and next_status in ACTIVE_APPOINTMENT_STATUSES:
+        existing_appointment = find_active_appointment_at_time(
+            db,
+            next_veterinarian_id,
+            next_date,
+            next_time,
+            excluded_appointment_id=appointment_id,
         )
+        if existing_appointment:
+            raise HTTPException(
+                status_code=400,
+                detail="Bu saat için seçilen klinikte randevu dolu.",
+            )
 
     for field, value in update_data.items():
         setattr(appointment, field, value)

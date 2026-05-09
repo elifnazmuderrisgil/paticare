@@ -7,7 +7,6 @@ const initialFormData = {
   email: "",
   password: "",
   phone: "",
-  role: "customer",
 };
 
 function RegisterPage() {
@@ -27,11 +26,14 @@ function RegisterPage() {
     setIsSubmitting(true);
 
     axios
-      .post("http://127.0.0.1:8000/auth/register", formData)
+      .post("http://127.0.0.1:8000/auth/register", {
+        ...formData,
+        role: "customer",
+      })
       .then((response) => {
         const user = response.data;
         localStorage.setItem("user", JSON.stringify(user));
-        navigate(user.role === "veterinarian" ? "/veterinarian" : "/customer");
+        navigate("/customer");
       })
       .catch((requestError) => {
         console.error(requestError);
@@ -92,14 +94,6 @@ function RegisterPage() {
               onChange={handleChange}
               required
             />
-          </label>
-
-          <label className="full-width">
-            Rol
-            <select name="role" value={formData.role} onChange={handleChange}>
-              <option value="customer">Müşteri</option>
-              <option value="veterinarian">Veteriner Hekim</option>
-            </select>
           </label>
         </div>
 

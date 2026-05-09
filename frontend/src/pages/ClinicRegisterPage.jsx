@@ -1,19 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
-
-const cityOptions = [
-  "İstanbul",
-  "Ankara",
-  "İzmir",
-  "Gaziantep",
-  "Mersin",
-  "Adana",
-  "Antalya",
-  "Eskişehir",
-];
 
 const districtOptions = {
   İstanbul: ["Kadıköy", "Beşiktaş", "Üsküdar"],
@@ -32,25 +21,37 @@ const initialFormData = {
   password: "",
   phone: "",
   clinic_name: "",
-  city: "",
+  city_id: "",
   district: "",
   address: "",
 };
 
 function ClinicRegisterPage() {
   const [formData, setFormData] = useState(initialFormData);
+  const [cities, setCities] = useState([]);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const availableDistricts = districtOptions[formData.city] || [];
+  const selectedCity = cities.find((city) => String(city.id) === String(formData.city_id));
+  const availableDistricts = districtOptions[selectedCity?.name] || [];
+
+  useEffect(() => {
+    axios
+      .get(`${API_BASE_URL}/cities`)
+      .then((response) => setCities(response.data))
+      .catch((requestError) => {
+        console.error(requestError);
+        setError("Şehir listesi alınamadı.");
+      });
+  }, []);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
     setFormData((currentFormData) => ({
       ...currentFormData,
       [name]: value,
-      ...(name === "city" ? { district: "" } : {}),
+      ...(name === "city_id" ? { district: "" } : {}),
     }));
     setError("");
     setSuccessMessage("");
@@ -138,11 +139,11 @@ function ClinicRegisterPage() {
           </label>
           <label>
             Şehir
-            <select name="city" value={formData.city} onChange={handleChange} required>
+            <select name="city_id" value={formData.city_id} onChange={handleChange} required>
               <option value="">Şehir seçin</option>
-              {cityOptions.map((city) => (
-                <option key={city} value={city}>
-                  {city}
+              {cities.map((city) => (
+                <option key={city.id} value={city.id}>
+                  {city.name}
                 </option>
               ))}
             </select>
@@ -153,7 +154,7 @@ function ClinicRegisterPage() {
               name="district"
               value={formData.district}
               onChange={handleChange}
-              disabled={!formData.city}
+              disabled={!formData.city_id}
               required
             >
               <option value="">İlçe seçin</option>
