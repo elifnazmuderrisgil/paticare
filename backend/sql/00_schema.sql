@@ -9,23 +9,18 @@ CREATE TABLE IF NOT EXISTS cities (
     name VARCHAR(100) UNIQUE NOT NULL
 );
 
--- Veteriner Kliniğini eklemek için tabloda sütun ekleme
-ALTER TABLE veterinarians 
-ADD COLUMN IF NOT EXISTS clinic_name VARCHAR(150);
-
-ALTER TABLE veterinarians 
-ADD COLUMN IF NOT EXISTS city VARCHAR(100);
-
-ALTER TABLE veterinarians 
-ADD COLUMN IF NOT EXISTS district VARCHAR(100);
-
-ALTER TABLE veterinarians 
-ADD COLUMN IF NOT EXISTS address TEXT;
+CREATE TABLE IF NOT EXISTS clinics (
+    id SERIAL PRIMARY KEY,
+    clinic_name VARCHAR(255) NOT NULL,
+    city_id INT REFERENCES cities(id),
+    district VARCHAR(100),
+    address TEXT
+);
 
 -- Veteriner şifresi
 ALTER TABLE veterinarians
 ADD COLUMN IF NOT EXISTS password VARCHAR(255);
 
--- Şehir ID'si
+-- Klinik ilişkisi
 ALTER TABLE veterinarians
-ADD COLUMN IF NOT EXISTS city_id INT REFERENCES cities(id);
+ADD COLUMN IF NOT EXISTS clinic_id INT REFERENCES clinics(id);

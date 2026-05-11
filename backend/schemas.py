@@ -1,6 +1,5 @@
 from pydantic import BaseModel
 from datetime import date, time
-from decimal import Decimal
 
 class UserCreate(BaseModel):
     full_name: str
@@ -40,7 +39,6 @@ class PetResponse(PetCreate):
 class ServiceResponse(BaseModel):
     id: int
     service_name: str
-    price: Decimal | None = None
 
     class Config:
         from_attributes = True
@@ -52,20 +50,41 @@ class CityResponse(BaseModel):
     class Config:
         from_attributes = True
 
-class VeterinarianResponse(BaseModel):
+class ClinicResponse(BaseModel):
     id: int
-    full_name: str
-    email: str | None = None
-    phone: str | None = None
-    clinic_name: str | None = None
+    clinic_name: str
     city_id: int | None = None
     city_name: str | None = None
-    city: str | None = None
     district: str | None = None
     address: str | None = None
 
     class Config:
         from_attributes = True
+
+class VeterinarianResponse(BaseModel):
+    id: int
+    full_name: str
+    email: str | None = None
+    phone: str | None = None
+    clinic_id: int | None = None
+    clinic_name: str | None = None
+    city_id: int | None = None
+    city_name: str | None = None
+    district: str | None = None
+    address: str | None = None
+
+    class Config:
+        from_attributes = True
+
+class VeterinarianCreate(BaseModel):
+    owner_veterinarian_id: int
+    full_name: str
+    email: str
+    password: str
+    phone: str
+
+class VeterinarianCreateResponse(VeterinarianResponse):
+    user_id: int
 
 class AppointmentCreate(BaseModel):
     user_id: int
@@ -98,11 +117,11 @@ class AppointmentDetailResponse(BaseModel):
     pet_species: str | None = None
     service_name: str | None = None
     veterinarian_name: str | None = None
+    clinic_id: int | None = None
     clinic_name: str | None = None
     veterinarian_city_id: int | None = None
     city_name: str | None = None
     district: str | None = None
-    veterinarian_city: str | None = None
     veterinarian_district: str | None = None
     veterinarian_address: str | None = None
     customer_name: str | None = None
@@ -128,19 +147,19 @@ class ClinicRegisterCreate(BaseModel):
     phone: str
     clinic_name: str
     city_id: int | None = None
-    city: str | None = None
+    city_name: str | None = None
     district: str
     address: str
 
 class ClinicRegisterResponse(BaseModel):
     user_id: int
     veterinarian_id: int
+    clinic_id: int
     full_name: str
     email: str
     clinic_name: str
     city_id: int | None = None
     city_name: str | None = None
-    city: str
     district: str
     address: str
 

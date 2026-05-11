@@ -24,7 +24,6 @@ ON CONFLICT (name) DO NOTHING;
 UPDATE veterinarians
 SET
     clinic_name = 'Pati Dostum Veteriner Kliniği',
-    city = 'İstanbul',
     district = 'Kadıköy',
     address = 'Caferağa Mahallesi, Moda Caddesi No: 12 Kadıköy / İstanbul',
     city_id = (SELECT id FROM cities WHERE name = 'İstanbul')
@@ -33,7 +32,6 @@ WHERE email = 'ayse@vet.com' OR full_name = 'Dr. Ayşe Demir';
 UPDATE veterinarians
 SET
     clinic_name = 'Minik Patiler Kliniği',
-    city = 'İstanbul',
     district = 'Beşiktaş',
     address = 'Sinanpaşa Mahallesi, Ortabahçe Caddesi No: 8 Beşiktaş / İstanbul',
     city_id = (SELECT id FROM cities WHERE name = 'İstanbul')
@@ -42,7 +40,6 @@ WHERE email = 'mehmet@vet.com' OR full_name = 'Dr. Mehmet Can';
 UPDATE veterinarians
 SET
     clinic_name = 'Sağlıklı Pati Kliniği',
-    city = 'Ankara',
     district = 'Çankaya',
     address = 'Bahçelievler Mahallesi, 7. Cadde No: 24 Çankaya / Ankara',
     city_id = (SELECT id FROM cities WHERE name = 'Ankara')
@@ -51,75 +48,89 @@ WHERE email = 'selin@vet.com' OR full_name = 'Dr. Selin Arslan';
 -- ============================================================================
 -- SECTION 3: Veterinerleri Ekle (Yeni)
 -- ============================================================================
-INSERT INTO veterinarians (full_name, specialty, phone, email, clinic_name, city, district, address, city_id)
-SELECT 'Dr. Burak Yılmaz', NULL, '05550102030', 'burak@vet.com', 'Ege Vet Kliniği', 'İzmir', 'Karşıyaka', 'Bostanlı Mahallesi, Cemal Gürsel Caddesi No: 45 Karşıyaka / İzmir', c.id
-FROM cities c WHERE c.name = 'İzmir'
-WHERE NOT EXISTS (SELECT 1 FROM veterinarians WHERE email = 'burak@vet.com');
+INSERT INTO veterinarians (full_name, phone, email, clinic_name, district, address, city_id)
+SELECT 'Dr. Burak Yılmaz', '05550102030', 'burak@vet.com', 'Ege Vet Kliniği', 'Karşıyaka', 'Bostanlı Mahallesi, Cemal Gürsel Caddesi No: 45 Karşıyaka / İzmir', c.id
+FROM cities c
+WHERE c.name = 'İzmir'
+  AND NOT EXISTS (SELECT 1 FROM veterinarians WHERE email = 'burak@vet.com');
 
-INSERT INTO veterinarians (full_name, specialty, phone, email, clinic_name, city, district, address, city_id)
-SELECT 'Dr. Elif Kaya', NULL, '05550405060', 'elifkaya@vet.com', 'Can Dostlar Vet', 'Gaziantep', 'Şahinbey', 'Binevler Mahallesi, Üniversite Bulvarı No: 18 Şahinbey / Gaziantep', c.id
-FROM cities c WHERE c.name = 'Gaziantep'
-WHERE NOT EXISTS (SELECT 1 FROM veterinarians WHERE email = 'elifkaya@vet.com');
+INSERT INTO veterinarians (full_name, phone, email, clinic_name, district, address, city_id)
+SELECT 'Dr. Elif Kaya', '05550405060', 'elifkaya@vet.com', 'Can Dostlar Vet', 'Şahinbey', 'Binevler Mahallesi, Üniversite Bulvarı No: 18 Şahinbey / Gaziantep', c.id
+FROM cities c
+WHERE c.name = 'Gaziantep'
+  AND NOT EXISTS (SELECT 1 FROM veterinarians WHERE email = 'elifkaya@vet.com');
 
-INSERT INTO veterinarians (full_name, specialty, phone, email, clinic_name, city, district, address, city_id)
-SELECT 'Dr. Murat Demir', NULL, '05550708090', 'murat@vet.com', 'Pati Yaşam Kliniği', 'Gaziantep', 'Şehitkamil', 'Atatürk Mahallesi, İpekyolu Caddesi No: 31 Şehitkamil / Gaziantep', c.id
-FROM cities c WHERE c.name = 'Gaziantep'
-WHERE NOT EXISTS (SELECT 1 FROM veterinarians WHERE email = 'murat@vet.com');
+INSERT INTO veterinarians (full_name, phone, email, clinic_name, district, address, city_id)
+SELECT 'Dr. Murat Demir', '05550708090', 'murat@vet.com', 'Pati Yaşam Kliniği', 'Şehitkamil', 'Atatürk Mahallesi, İpekyolu Caddesi No: 31 Şehitkamil / Gaziantep', c.id
+FROM cities c
+WHERE c.name = 'Gaziantep'
+  AND NOT EXISTS (SELECT 1 FROM veterinarians WHERE email = 'murat@vet.com');
 
-INSERT INTO veterinarians (full_name, clinic_name, city, district, address, city_id)
-SELECT 'Dr. Deniz Acar', 'Mersin Pati Kliniği', 'Mersin', 'Yenişehir', 'Mersin Yenişehir merkez', c.id
-FROM cities c WHERE c.name = 'Mersin'
-WHERE NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Deniz Acar');
+INSERT INTO veterinarians (full_name, clinic_name, district, address, city_id)
+SELECT 'Dr. Deniz Acar', 'Mersin Pati Kliniği', 'Yenişehir', 'Mersin Yenişehir merkez', c.id
+FROM cities c
+WHERE c.name = 'Mersin'
+  AND NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Deniz Acar');
 
-INSERT INTO veterinarians (full_name, clinic_name, city, district, address, city_id)
-SELECT 'Dr. Ceren Yıldız', 'Mezitli VetCare', 'Mersin', 'Mezitli', 'Mersin Mezitli sahil yolu', c.id
-FROM cities c WHERE c.name = 'Mersin'
-WHERE NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Ceren Yıldız');
+INSERT INTO veterinarians (full_name, clinic_name, district, address, city_id)
+SELECT 'Dr. Ceren Yıldız', 'Mezitli VetCare', 'Mezitli', 'Mersin Mezitli sahil yolu', c.id
+FROM cities c
+WHERE c.name = 'Mersin'
+  AND NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Ceren Yıldız');
 
-INSERT INTO veterinarians (full_name, clinic_name, city, district, address, city_id)
-SELECT 'Dr. Emre Kılıç', 'Toroslar Hayvan Sağlığı', 'Mersin', 'Toroslar', 'Mersin Toroslar merkez', c.id
-FROM cities c WHERE c.name = 'Mersin'
-WHERE NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Emre Kılıç');
+INSERT INTO veterinarians (full_name, clinic_name, district, address, city_id)
+SELECT 'Dr. Emre Kılıç', 'Toroslar Hayvan Sağlığı', 'Toroslar', 'Mersin Toroslar merkez', c.id
+FROM cities c
+WHERE c.name = 'Mersin'
+  AND NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Emre Kılıç');
 
-INSERT INTO veterinarians (full_name, clinic_name, city, district, address, city_id)
-SELECT 'Dr. Selin Koç', 'Adana Can Dostum Vet', 'Adana', 'Seyhan', 'Adana Seyhan merkez', c.id
-FROM cities c WHERE c.name = 'Adana'
-WHERE NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Selin Koç');
+INSERT INTO veterinarians (full_name, clinic_name, district, address, city_id)
+SELECT 'Dr. Selin Koç', 'Adana Can Dostum Vet', 'Seyhan', 'Adana Seyhan merkez', c.id
+FROM cities c
+WHERE c.name = 'Adana'
+  AND NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Selin Koç');
 
-INSERT INTO veterinarians (full_name, clinic_name, city, district, address, city_id)
-SELECT 'Dr. Barış Eren', 'Çukurova Pati Merkezi', 'Adana', 'Çukurova', 'Adana Çukurova merkez', c.id
-FROM cities c WHERE c.name = 'Adana'
-WHERE NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Barış Eren');
+INSERT INTO veterinarians (full_name, clinic_name, district, address, city_id)
+SELECT 'Dr. Barış Eren', 'Çukurova Pati Merkezi', 'Çukurova', 'Adana Çukurova merkez', c.id
+FROM cities c
+WHERE c.name = 'Adana'
+  AND NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Barış Eren');
 
-INSERT INTO veterinarians (full_name, clinic_name, city, district, address, city_id)
-SELECT 'Dr. Melis Arda', 'Yüreğir Veteriner Kliniği', 'Adana', 'Yüreğir', 'Adana Yüreğir merkez', c.id
-FROM cities c WHERE c.name = 'Adana'
-WHERE NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Melis Arda');
+INSERT INTO veterinarians (full_name, clinic_name, district, address, city_id)
+SELECT 'Dr. Melis Arda', 'Yüreğir Veteriner Kliniği', 'Yüreğir', 'Adana Yüreğir merkez', c.id
+FROM cities c
+WHERE c.name = 'Adana'
+  AND NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Melis Arda');
 
-INSERT INTO veterinarians (full_name, clinic_name, city, district, address, city_id)
-SELECT 'Dr. Ece Demir', 'Antalya PetLife', 'Antalya', 'Muratpaşa', 'Antalya Muratpaşa merkez', c.id
-FROM cities c WHERE c.name = 'Antalya'
-WHERE NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Ece Demir');
+INSERT INTO veterinarians (full_name, clinic_name, district, address, city_id)
+SELECT 'Dr. Ece Demir', 'Antalya PetLife', 'Muratpaşa', 'Antalya Muratpaşa merkez', c.id
+FROM cities c
+WHERE c.name = 'Antalya'
+  AND NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Ece Demir');
 
-INSERT INTO veterinarians (full_name, clinic_name, city, district, address, city_id)
-SELECT 'Dr. Kerem Yalçın', 'Konyaaltı Pati Kliniği', 'Antalya', 'Konyaaltı', 'Antalya Konyaaltı sahil', c.id
-FROM cities c WHERE c.name = 'Antalya'
-WHERE NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Kerem Yalçın');
+INSERT INTO veterinarians (full_name, clinic_name, district, address, city_id)
+SELECT 'Dr. Kerem Yalçın', 'Konyaaltı Pati Kliniği', 'Konyaaltı', 'Antalya Konyaaltı sahil', c.id
+FROM cities c
+WHERE c.name = 'Antalya'
+  AND NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Kerem Yalçın');
 
-INSERT INTO veterinarians (full_name, clinic_name, city, district, address, city_id)
-SELECT 'Dr. Sude Aksoy', 'Alanya VetPoint', 'Antalya', 'Alanya', 'Antalya Alanya merkez', c.id
-FROM cities c WHERE c.name = 'Antalya'
-WHERE NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Sude Aksoy');
+INSERT INTO veterinarians (full_name, clinic_name, district, address, city_id)
+SELECT 'Dr. Sude Aksoy', 'Alanya VetPoint', 'Alanya', 'Antalya Alanya merkez', c.id
+FROM cities c
+WHERE c.name = 'Antalya'
+  AND NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Sude Aksoy');
 
-INSERT INTO veterinarians (full_name, clinic_name, city, district, address, city_id)
-SELECT 'Dr. Okan Yılmaz', 'Eskişehir Pati Sağlığı', 'Eskişehir', 'Odunpazarı', 'Eskişehir Odunpazarı merkez', c.id
-FROM cities c WHERE c.name = 'Eskişehir'
-WHERE NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Okan Yılmaz');
+INSERT INTO veterinarians (full_name, clinic_name, district, address, city_id)
+SELECT 'Dr. Okan Yılmaz', 'Eskişehir Pati Sağlığı', 'Odunpazarı', 'Eskişehir Odunpazarı merkez', c.id
+FROM cities c
+WHERE c.name = 'Eskişehir'
+  AND NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Okan Yılmaz');
 
-INSERT INTO veterinarians (full_name, clinic_name, city, district, address, city_id)
-SELECT 'Dr. Derya Şahin', 'Tepebaşı Vet Kliniği', 'Eskişehir', 'Tepebaşı', 'Eskişehir Tepebaşı merkez', c.id
-FROM cities c WHERE c.name = 'Eskişehir'
-WHERE NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Derya Şahin');
+INSERT INTO veterinarians (full_name, clinic_name, district, address, city_id)
+SELECT 'Dr. Derya Şahin', 'Tepebaşı Vet Kliniği', 'Tepebaşı', 'Eskişehir Tepebaşı merkez', c.id
+FROM cities c
+WHERE c.name = 'Eskişehir'
+  AND NOT EXISTS (SELECT 1 FROM veterinarians WHERE full_name = 'Dr. Derya Şahin');
 
 -- ============================================================================
 -- SECTION 4: Veteriner Şifreleri
@@ -131,18 +142,18 @@ WHERE password IS NULL;
 -- ============================================================================
 -- SECTION 5: Veteriner Hizmetleri
 -- ============================================================================
-INSERT INTO services (service_name, price)
+INSERT INTO services (service_name)
 VALUES
-('Genel Muayene', 500),
-('Aşı Uygulaması', 400),
-('Tırnak Kesimi', 200),
-('Acil Kontrol', 1000),
-('Kontrol Muayenesi', 350),
-('Diş Kontrolü', 600),
-('Parazit Tedavisi', 450),
-('Kısırlaştırma Danışmanlığı', 750),
-('Beslenme Danışmanlığı', 300),
-('Cilt ve Tüy Kontrolü', 550)
+('Genel Muayene'),
+('Aşı Uygulaması'),
+('Tırnak Kesimi'),
+('Acil Kontrol'),
+('Kontrol Muayenesi'),
+('Diş Kontrolü'),
+('Parazit Tedavisi'),
+('Kısırlaştırma Danışmanlığı'),
+('Beslenme Danışmanlığı'),
+('Cilt ve Tüy Kontrolü')
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
@@ -319,3 +330,5 @@ WHERE service_id = (
 UPDATE appointments
 SET appointment_date = appointment_date + INTERVAL '1 day'
 WHERE status = 'İptal';
+
+

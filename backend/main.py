@@ -35,27 +35,38 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def get_city_name(veterinarian, city):
+def get_city_name(city):
     if city:
         return city.name
-    if veterinarian:
-        return veterinarian.city
     return None
 
-def veterinarian_response(veterinarian, city=None):
-    city_name = get_city_name(veterinarian, city)
+def clinic_response(clinic, city=None):
+    if not clinic:
+        return None
+
+    return {
+        "id": clinic.id,
+        "clinic_name": clinic.clinic_name,
+        "city_id": clinic.city_id,
+        "city_name": get_city_name(city),
+        "district": clinic.district,
+        "address": clinic.address,
+    }
+
+def veterinarian_response(veterinarian, clinic=None, city=None):
+    clinic_data = clinic_response(clinic, city) or {}
 
     return {
         "id": veterinarian.id,
         "full_name": veterinarian.full_name,
         "email": veterinarian.email,
         "phone": veterinarian.phone,
-        "clinic_name": veterinarian.clinic_name,
-        "city_id": veterinarian.city_id,
-        "city_name": city_name,
-        "city": city_name,
-        "district": veterinarian.district,
-        "address": veterinarian.address,
+        "clinic_id": veterinarian.clinic_id,
+        "clinic_name": clinic_data.get("clinic_name"),
+        "city_id": clinic_data.get("city_id"),
+        "city_name": clinic_data.get("city_name"),
+        "district": clinic_data.get("district"),
+        "address": clinic_data.get("address"),
     }
 
 def format_email_date(value):
@@ -64,11 +75,11 @@ def format_email_date(value):
 def format_email_time(value):
     return value.strftime("%H:%M") if value else "-"
 
-def get_clinic_address(veterinarian, city=None):
+def get_clinic_address(clinic, city=None):
     address_parts = [
-        veterinarian.address,
-        veterinarian.district,
-        get_city_name(veterinarian, city),
+        clinic.address if clinic else None,
+        clinic.district if clinic else None,
+        get_city_name(city),
     ]
     return ", ".join(part for part in address_parts if part) or "-"
 
@@ -79,6 +90,7 @@ def get_appointment_email_context(db: Session, appointment_id: int):
             models.Pet,
             models.Service,
             models.Veterinarian,
+            models.Clinic,
             models.User,
             models.City,
         )
@@ -88,8 +100,9 @@ def get_appointment_email_context(db: Session, appointment_id: int):
             models.Veterinarian,
             models.Appointment.veterinarian_id == models.Veterinarian.id,
         )
+        .outerjoin(models.Clinic, models.Veterinarian.clinic_id == models.Clinic.id)
         .outerjoin(models.User, models.Appointment.user_id == models.User.id)
-        .outerjoin(models.City, models.Veterinarian.city_id == models.City.id)
+        .outerjoin(models.City, models.Clinic.city_id == models.City.id)
         .filter(models.Appointment.id == appointment_id)
         .first()
     )
@@ -99,7 +112,7 @@ def send_new_appointment_notification(db: Session, appointment_id: int):
     if not context:
         return
 
-    appointment, pet, service, veterinarian, user, _ = context
+    appointment, pet, service, veterinarian, clinic, user, _ = context
     if not veterinarian or not veterinarian.email or not user or not pet:
         return
 
@@ -120,7 +133,7 @@ def send_appointment_status_email(db: Session, appointment_id: int, status: str)
     if not context:
         return
 
-    appointment, pet, service, veterinarian, user, city = context
+    appointment, pet, service, veterinarian, clinic, user, city = context
     if not user or not user.email or not veterinarian:
         return
 
@@ -129,19 +142,19 @@ def send_appointment_status_email(db: Session, appointment_id: int, status: str)
             customer_name=user.full_name or "PatiCare kullanıcısı",
             customer_email=user.email,
             veterinarian_name=veterinarian.full_name or "-",
-            clinic_name=veterinarian.clinic_name or "-",
+            clinic_name=clinic.clinic_name if clinic else "-",
             appointment_date=format_email_date(appointment.appointment_date),
             appointment_time=format_email_time(appointment.appointment_time),
             pet_name=pet.name if pet else "-",
             service_name=service.service_name if service else "-",
-            clinic_address=get_clinic_address(veterinarian, city),
+            clinic_address=get_clinic_address(clinic, city),
         )
     elif status == "İptal":
         email_service.appointment_cancelled_email(
             customer_name=user.full_name or "PatiCare kullanıcısı",
             customer_email=user.email,
             veterinarian_name=veterinarian.full_name or "-",
-            clinic_name=veterinarian.clinic_name or "-",
+            clinic_name=clinic.clinic_name if clinic else "-",
             appointment_date=format_email_date(appointment.appointment_date),
             appointment_time=format_email_time(appointment.appointment_time),
         )
@@ -160,20 +173,20 @@ def appointment_detail_rows(query):
             "pet_species": pet.species if pet else None,
             "service_name": service.service_name if service else None,
             "veterinarian_name": veterinarian.full_name if veterinarian else None,
-            "clinic_name": veterinarian.clinic_name if veterinarian else None,
-            "veterinarian_city_id": veterinarian.city_id if veterinarian else None,
-            "city_name": get_city_name(veterinarian, city),
-            "district": veterinarian.district if veterinarian else None,
-            "veterinarian_city": get_city_name(veterinarian, city),
-            "veterinarian_district": veterinarian.district if veterinarian else None,
-            "veterinarian_address": veterinarian.address if veterinarian else None,
+            "clinic_id": clinic.id if clinic else None,
+            "clinic_name": clinic.clinic_name if clinic else None,
+            "veterinarian_city_id": clinic.city_id if clinic else None,
+            "city_name": get_city_name(city),
+            "district": clinic.district if clinic else None,
+            "veterinarian_district": clinic.district if clinic else None,
+            "veterinarian_address": clinic.address if clinic else None,
             "customer_name": user.full_name if user else None,
             "customer_phone": user.phone if user else None,
             "appointment_date": appointment.appointment_date,
             "appointment_time": appointment.appointment_time,
             "status": appointment.status,
         }
-        for appointment, pet, service, veterinarian, user, city in rows
+        for appointment, pet, service, veterinarian, clinic, user, city in rows
     ]
 
 def appointment_detail_query(db: Session):
@@ -183,6 +196,7 @@ def appointment_detail_query(db: Session):
             models.Pet,
             models.Service,
             models.Veterinarian,
+            models.Clinic,
             models.User,
             models.City,
         )
@@ -192,8 +206,9 @@ def appointment_detail_query(db: Session):
             models.Veterinarian,
             models.Appointment.veterinarian_id == models.Veterinarian.id,
         )
+        .outerjoin(models.Clinic, models.Veterinarian.clinic_id == models.Clinic.id)
         .outerjoin(models.User, models.Appointment.user_id == models.User.id)
-        .outerjoin(models.City, models.Veterinarian.city_id == models.City.id)
+        .outerjoin(models.City, models.Clinic.city_id == models.City.id)
     )
 
 def is_past_appointment_datetime(appointment_date: date, appointment_time: time):
@@ -247,22 +262,71 @@ def validate_appointment_status_transition(current_status: str, next_status: str
 
     raise HTTPException(status_code=400, detail=detail)
 
+def get_or_create_city(city_name: str, db: Session):
+    normalized_name = " ".join(city_name.split())
+
+    if not normalized_name:
+        raise HTTPException(status_code=400, detail="Geçerli bir şehir adı girin.")
+
+    existing_city = (
+        db.query(models.City)
+        .filter(func.lower(models.City.name) == normalized_name.lower())
+        .first()
+    )
+
+    if existing_city:
+        return existing_city
+
+    new_city = models.City(name=normalized_name)
+    db.add(new_city)
+    db.flush()
+    return new_city
+
 def resolve_city(clinic: schemas.ClinicRegisterCreate, db: Session):
     city = None
 
     if clinic.city_id:
         city = db.query(models.City).filter(models.City.id == clinic.city_id).first()
-    elif clinic.city:
-        city = (
-            db.query(models.City)
-            .filter(models.City.name == clinic.city.strip())
-            .first()
-        )
+        if city:
+            return city
+        raise HTTPException(status_code=400, detail="Geçerli bir şehir seçin.")
+
+    if clinic.city_name:
+        return get_or_create_city(clinic.city_name, db)
 
     if not city:
         raise HTTPException(status_code=400, detail="Geçerli bir şehir seçin.")
 
     return city
+
+def get_veterinarian_or_404(veterinarian_id: int, db: Session):
+    veterinarian = (
+        db.query(models.Veterinarian)
+        .filter(models.Veterinarian.id == veterinarian_id)
+        .first()
+    )
+
+    if not veterinarian:
+        raise HTTPException(status_code=404, detail="Veteriner bulunamadÄ±.")
+
+    return veterinarian
+
+def get_clinic_or_404(clinic_id: int, db: Session):
+    clinic = db.query(models.Clinic).filter(models.Clinic.id == clinic_id).first()
+
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Klinik bulunamadÄ±.")
+
+    return clinic
+
+def clinic_veterinarian_query(db: Session, owner_veterinarian):
+    return (
+        db.query(models.Veterinarian, models.Clinic, models.City)
+        .outerjoin(models.Clinic, models.Veterinarian.clinic_id == models.Clinic.id)
+        .outerjoin(models.City, models.Clinic.city_id == models.City.id)
+        .filter(models.Veterinarian.clinic_id == owner_veterinarian.clinic_id)
+        .order_by(models.Veterinarian.full_name.asc())
+    )
 
 @app.get("/")
 def home():
@@ -322,12 +386,19 @@ def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
             )
 
             if veterinarian:
+                clinic = (
+                    db.query(models.Clinic)
+                    .filter(models.Clinic.id == veterinarian.clinic_id)
+                    .first()
+                )
                 return {
                     "id": veterinarian.id,
                     "full_name": veterinarian.full_name,
                     "email": veterinarian.email,
+                    "phone": veterinarian.phone,
                     "role": "veterinarian",
-                    "clinic_name": veterinarian.clinic_name,
+                    "clinic_id": veterinarian.clinic_id,
+                    "clinic_name": clinic.clinic_name if clinic else None,
                 }
 
         return {
@@ -348,12 +419,19 @@ def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
     )
 
     if veterinarian:
+        clinic = (
+            db.query(models.Clinic)
+            .filter(models.Clinic.id == veterinarian.clinic_id)
+            .first()
+        )
         return {
             "id": veterinarian.id,
             "full_name": veterinarian.full_name,
             "email": veterinarian.email,
+            "phone": veterinarian.phone,
             "role": "veterinarian",
-            "clinic_name": veterinarian.clinic_name,
+            "clinic_id": veterinarian.clinic_id,
+            "clinic_name": clinic.clinic_name if clinic else None,
         }
 
     raise HTTPException(status_code=401, detail="Email veya şifre hatalı")
@@ -390,16 +468,21 @@ def register_clinic(
     db.add(new_user)
     db.flush()
 
+    new_clinic = models.Clinic(
+        clinic_name=clinic.clinic_name,
+        city_id=city.id,
+        district=clinic.district,
+        address=clinic.address,
+    )
+    db.add(new_clinic)
+    db.flush()
+
     new_veterinarian = models.Veterinarian(
         full_name=clinic.full_name,
         email=email,
         password=clinic.password,
         phone=clinic.phone,
-        clinic_name=clinic.clinic_name,
-        city_id=city.id,
-        city=city.name,
-        district=clinic.district,
-        address=clinic.address,
+        clinic_id=new_clinic.id,
     )
     db.add(new_veterinarian)
     db.commit()
@@ -409,14 +492,14 @@ def register_clinic(
     return {
         "user_id": new_user.id,
         "veterinarian_id": new_veterinarian.id,
+        "clinic_id": new_clinic.id,
         "full_name": new_veterinarian.full_name,
         "email": new_veterinarian.email,
-        "clinic_name": new_veterinarian.clinic_name,
-        "city_id": new_veterinarian.city_id,
+        "clinic_name": new_clinic.clinic_name,
+        "city_id": new_clinic.city_id,
         "city_name": city.name,
-        "city": city.name,
-        "district": new_veterinarian.district,
-        "address": new_veterinarian.address,
+        "district": new_clinic.district,
+        "address": new_clinic.address,
     }
 
 @app.get("/debug/users")
@@ -494,19 +577,67 @@ def get_services(db: Session = Depends(get_db)):
 def get_cities(db: Session = Depends(get_db)):
     return db.query(models.City).order_by(models.City.name.asc()).all()
 
+@app.get("/clinics", response_model=list[schemas.ClinicResponse])
+def get_clinics(db: Session = Depends(get_db)):
+    rows = (
+        db.query(models.Clinic, models.City)
+        .outerjoin(models.City, models.Clinic.city_id == models.City.id)
+        .order_by(models.City.name.asc(), models.Clinic.district.asc(), models.Clinic.clinic_name.asc())
+        .all()
+    )
+    return [clinic_response(clinic, city) for clinic, city in rows]
+
+@app.get("/clinics/search", response_model=list[schemas.ClinicResponse])
+def search_clinics(
+    city_id: int | None = None,
+    district: str | None = None,
+    db: Session = Depends(get_db),
+):
+    query = (
+        db.query(models.Clinic, models.City)
+        .outerjoin(models.City, models.Clinic.city_id == models.City.id)
+    )
+
+    if city_id:
+        query = query.filter(models.Clinic.city_id == city_id)
+
+    if district:
+        query = query.filter(func.lower(models.Clinic.district) == district.strip().lower())
+
+    rows = (
+        query.order_by(models.City.name.asc(), models.Clinic.district.asc(), models.Clinic.clinic_name.asc())
+        .all()
+    )
+    return [clinic_response(clinic, city) for clinic, city in rows]
+
+@app.get("/clinics/{clinic_id}/veterinarians", response_model=list[schemas.VeterinarianResponse])
+def get_clinic_veterinarians_by_clinic(clinic_id: int, db: Session = Depends(get_db)):
+    get_clinic_or_404(clinic_id, db)
+    rows = (
+        db.query(models.Veterinarian, models.Clinic, models.City)
+        .outerjoin(models.Clinic, models.Veterinarian.clinic_id == models.Clinic.id)
+        .outerjoin(models.City, models.Clinic.city_id == models.City.id)
+        .filter(models.Veterinarian.clinic_id == clinic_id)
+        .order_by(models.Veterinarian.full_name.asc())
+        .all()
+    )
+    return [veterinarian_response(veterinarian, clinic, city) for veterinarian, clinic, city in rows]
+
 @app.get("/veterinarians", response_model=list[schemas.VeterinarianResponse])
 def get_veterinarians(db: Session = Depends(get_db)):
     rows = (
-        db.query(models.Veterinarian, models.City)
-        .outerjoin(models.City, models.Veterinarian.city_id == models.City.id)
+        db.query(models.Veterinarian, models.Clinic, models.City)
+        .outerjoin(models.Clinic, models.Veterinarian.clinic_id == models.Clinic.id)
+        .outerjoin(models.City, models.Clinic.city_id == models.City.id)
         .order_by(
             models.City.name.asc(),
-            models.Veterinarian.city.asc(),
-            models.Veterinarian.district.asc(),
+            models.Clinic.district.asc(),
+            models.Clinic.clinic_name.asc(),
+            models.Veterinarian.full_name.asc(),
         )
         .all()
     )
-    return [veterinarian_response(veterinarian, city) for veterinarian, city in rows]
+    return [veterinarian_response(veterinarian, clinic, city) for veterinarian, clinic, city in rows]
 
 @app.get("/veterinarians/districts")
 def get_veterinarian_districts(
@@ -515,18 +646,17 @@ def get_veterinarian_districts(
     db: Session = Depends(get_db),
 ):
     query = (
-        db.query(models.Veterinarian.district)
-        .outerjoin(models.City, models.Veterinarian.city_id == models.City.id)
-        .filter(models.Veterinarian.district.isnot(None))
+        db.query(models.Clinic.district)
+        .outerjoin(models.City, models.Clinic.city_id == models.City.id)
+        .filter(models.Clinic.district.isnot(None))
     )
 
     if city_id:
-        query = query.filter(models.Veterinarian.city_id == city_id)
+        query = query.filter(models.Clinic.city_id == city_id)
     elif city:
         city_value = city.strip()
         query = query.filter(
             (func.lower(models.City.name) == city_value.lower())
-            | (func.lower(models.Veterinarian.city) == city_value.lower())
         )
 
     districts = {
@@ -540,8 +670,9 @@ def get_veterinarian_districts(
 @app.get("/veterinarians/by-email/{email}", response_model=schemas.VeterinarianResponse)
 def get_veterinarian_by_email(email: str, db: Session = Depends(get_db)):
     row = (
-        db.query(models.Veterinarian, models.City)
-        .outerjoin(models.City, models.Veterinarian.city_id == models.City.id)
+        db.query(models.Veterinarian, models.Clinic, models.City)
+        .outerjoin(models.Clinic, models.Veterinarian.clinic_id == models.Clinic.id)
+        .outerjoin(models.City, models.Clinic.city_id == models.City.id)
         .filter(models.Veterinarian.email == email.strip().lower())
         .first()
     )
@@ -549,8 +680,86 @@ def get_veterinarian_by_email(email: str, db: Session = Depends(get_db)):
     if not row:
         raise HTTPException(status_code=404, detail="Veteriner kaydı bulunamadı.")
 
-    veterinarian, city = row
-    return veterinarian_response(veterinarian, city)
+    veterinarian, clinic, city = row
+    return veterinarian_response(veterinarian, clinic, city)
+
+@app.get(
+    "/veterinarians/{veterinarian_id}/clinic-veterinarians",
+    response_model=list[schemas.VeterinarianResponse],
+)
+def get_clinic_veterinarians(veterinarian_id: int, db: Session = Depends(get_db)):
+    owner_veterinarian = get_veterinarian_or_404(veterinarian_id, db)
+    rows = clinic_veterinarian_query(db, owner_veterinarian).all()
+    return [veterinarian_response(veterinarian, clinic, city) for veterinarian, clinic, city in rows]
+
+@app.post(
+    "/veterinarians/create-veterinarian",
+    response_model=schemas.VeterinarianCreateResponse,
+)
+def create_veterinarian(
+    veterinarian: schemas.VeterinarianCreate,
+    db: Session = Depends(get_db),
+):
+    owner_veterinarian = get_veterinarian_or_404(
+        veterinarian.owner_veterinarian_id,
+        db,
+    )
+    email = veterinarian.email.strip().lower()
+
+    existing_user = (
+        db.query(models.User)
+        .filter(models.User.email == email)
+        .first()
+    )
+    existing_veterinarian = (
+        db.query(models.Veterinarian)
+        .filter(models.Veterinarian.email == email)
+        .first()
+    )
+
+    if existing_user or existing_veterinarian:
+        raise HTTPException(
+            status_code=400,
+            detail="Bu email ile kayÄ±tlÄ± veteriner zaten mevcut.",
+        )
+
+    new_user = models.User(
+        full_name=veterinarian.full_name,
+        email=email,
+        password=veterinarian.password,
+        phone=veterinarian.phone,
+        role="veterinarian",
+    )
+    db.add(new_user)
+    db.flush()
+
+    new_veterinarian = models.Veterinarian(
+        full_name=veterinarian.full_name,
+        phone=veterinarian.phone,
+        email=email,
+        password=veterinarian.password,
+        clinic_id=owner_veterinarian.clinic_id,
+    )
+    db.add(new_veterinarian)
+    db.commit()
+    db.refresh(new_user)
+    db.refresh(new_veterinarian)
+
+    clinic = None
+    city = None
+    if new_veterinarian.clinic_id:
+        row = (
+            db.query(models.Clinic, models.City)
+            .outerjoin(models.City, models.Clinic.city_id == models.City.id)
+            .filter(models.Clinic.id == new_veterinarian.clinic_id)
+            .first()
+        )
+        if row:
+            clinic, city = row
+
+    response = veterinarian_response(new_veterinarian, clinic, city)
+    response["user_id"] = new_user.id
+    return response
 
 @app.get("/veterinarians/{veterinarian_id}/customers", response_model=list[schemas.UserResponse])
 def get_veterinarian_customers(veterinarian_id: int, db: Session = Depends(get_db)):
@@ -574,28 +783,32 @@ def search_veterinarians(
     city_id: int | None = None,
     city: str | None = None,
     district: str | None = None,
+    clinic_id: int | None = None,
     service_id: int | None = None,
     appointment_date: date | None = None,
     appointment_time: time | None = None,
     db: Session = Depends(get_db),
 ):
     query = (
-        db.query(models.Veterinarian, models.City)
-        .outerjoin(models.City, models.Veterinarian.city_id == models.City.id)
+        db.query(models.Veterinarian, models.Clinic, models.City)
+        .outerjoin(models.Clinic, models.Veterinarian.clinic_id == models.Clinic.id)
+        .outerjoin(models.City, models.Clinic.city_id == models.City.id)
     )
 
+    if clinic_id:
+        query = query.filter(models.Veterinarian.clinic_id == clinic_id)
+
     if city_id:
-        query = query.filter(models.Veterinarian.city_id == city_id)
+        query = query.filter(models.Clinic.city_id == city_id)
     elif city:
         city_value = city.strip()
         query = query.filter(
             (func.lower(models.City.name) == city_value.lower())
-            | (func.lower(models.Veterinarian.city) == city_value.lower())
         )
 
     if district:
         query = query.filter(
-            func.lower(models.Veterinarian.district) == district.strip().lower()
+            func.lower(models.Clinic.district) == district.strip().lower()
         )
 
     if service_id:
@@ -622,12 +835,13 @@ def search_veterinarians(
     rows = (
         query.order_by(
             models.City.name.asc(),
-            models.Veterinarian.city.asc(),
-            models.Veterinarian.district.asc(),
+            models.Clinic.district.asc(),
+            models.Clinic.clinic_name.asc(),
+            models.Veterinarian.full_name.asc(),
         )
         .all()
     )
-    return [veterinarian_response(veterinarian, city) for veterinarian, city in rows]
+    return [veterinarian_response(veterinarian, clinic, city) for veterinarian, clinic, city in rows]
 
 @app.get("/appointments", response_model=list[schemas.AppointmentDetailResponse])
 def get_appointments(db: Session = Depends(get_db)):

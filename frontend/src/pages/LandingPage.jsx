@@ -21,9 +21,7 @@ function getTodayDateString() {
 function uniqueClinics(clinics) {
   const seen = new Set();
   return clinics.filter((clinic) => {
-    const key = (clinic.email || clinic.full_name || clinic.id)
-      .toString()
-      .toLocaleLowerCase("tr-TR");
+    const key = String(clinic.id);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -32,6 +30,8 @@ function uniqueClinics(clinics) {
 
 // ── Per-clinic appointment panel ────────────────────────────────────────────
 function ClinicAppointmentPanel({ clinic, services, onBook }) {
+  const [veterinarians, setVeterinarians] = useState([]);
+  const [veterinarianId, setVeterinarianId] = useState("");
   const [serviceId, setServiceId] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
@@ -39,9 +39,22 @@ function ClinicAppointmentPanel({ clinic, services, onBook }) {
   const [loadingTimes, setLoadingTimes] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    axios
+      .get(`${API_BASE_URL}/clinics/${clinic.id}/veterinarians`)
+      .then((res) => {
+        setVeterinarians(res.data);
+        setVeterinarianId("");
+      })
+      .catch(() => {
+        setVeterinarians([]);
+        setVeterinarianId("");
+      });
+  }, [clinic.id]);
+
   // Fetch busy/available times whenever date changes
   useEffect(() => {
-    if (!date) {
+    if (!veterinarianId || !date) {
       setAvailableTimes(null);
       setTime("");
       return;
@@ -49,19 +62,22 @@ function ClinicAppointmentPanel({ clinic, services, onBook }) {
     setLoadingTimes(true);
     setTime("");
     axios
-      .get(`${API_BASE_URL}/veterinarians/${clinic.id}/available-times?date=${date}`)
+      .get(`${API_BASE_URL}/veterinarians/${veterinarianId}/available-times?date=${date}`)
       .then((res) => setAvailableTimes(res.data))
       .catch(() => setAvailableTimes(null))
       .finally(() => setLoadingTimes(false));
-  }, [date, clinic.id]);
+  }, [date, veterinarianId]);
 
   const handleBook = () => {
-    if (!serviceId || !date || !time) {
-      setError("Lütfen hizmet, tarih ve saat seçin.");
+    if (!veterinarianId || !serviceId || !date || !time) {
+      setError("Lütfen veteriner, hizmet, tarih ve saat seçin.");
       return;
     }
     setError("");
-    onBook(clinic, serviceId, date, time);
+    const selectedVeterinarian = veterinarians.find(
+      (veterinarian) => String(veterinarian.id) === String(veterinarianId)
+    );
+    onBook(clinic, selectedVeterinarian, serviceId, date, time);
   };
 
   const isTimeAvailable = (t) => {
@@ -72,6 +88,27 @@ function ClinicAppointmentPanel({ clinic, services, onBook }) {
 
   return (
     <div className="clinic-appt-panel">
+      <label className="clinic-appt-label">
+        <span>Veteriner</span>
+        <select
+          value={veterinarianId}
+          onChange={(e) => {
+            setVeterinarianId(e.target.value);
+            setDate("");
+            setTime("");
+            setError("");
+          }}
+          className="clinic-appt-select"
+        >
+          <option value="">Veteriner seÃ§in</option>
+          {veterinarians.map((veterinarian) => (
+            <option key={veterinarian.id} value={veterinarian.id}>
+              {veterinarian.full_name}
+            </option>
+          ))}
+        </select>
+      </label>
+
       {/* Service */}
       <label className="clinic-appt-label">
         <span>Hizmet</span>
@@ -95,6 +132,7 @@ function ClinicAppointmentPanel({ clinic, services, onBook }) {
           min={getTodayDateString()}
           value={date}
           onChange={(e) => { setDate(e.target.value); setError(""); }}
+          disabled={!veterinarianId}
           className="clinic-appt-select"
         />
       </label>
@@ -107,7 +145,7 @@ function ClinicAppointmentPanel({ clinic, services, onBook }) {
         <select
           value={time}
           onChange={(e) => { setTime(e.target.value); setError(""); }}
-          disabled={!date || loadingTimes}
+          disabled={!veterinarianId || !date || loadingTimes}
           className="clinic-appt-select"
         >
           <option value="">Saat seçin</option>
@@ -139,13 +177,12 @@ function ClinicCard({ clinic, services, onBook }) {
     <article className="clinic-card-v2">
       <div className="clinic-card-top">
         <div className="clinic-avatar">
-          {(clinic.clinic_name || clinic.full_name || "K")[0].toUpperCase()}
+          {(clinic.clinic_name || "K")[0].toUpperCase()}
         </div>
         <div className="clinic-card-info">
-          <h3>{clinic.clinic_name || clinic.full_name}</h3>
-          <p className="clinic-card-sub">{clinic.full_name}</p>
+          <h3>{clinic.clinic_name}</h3>
           <p className="clinic-card-location">
-            📍 {clinic.city_name || clinic.city || "—"} / {clinic.district || "—"}
+            📍 {clinic.city_name || "—"} / {clinic.district || "—"}
           </p>
           {clinic.address && (
             <p className="clinic-card-address">{clinic.address}</p>
@@ -222,7 +259,7 @@ function LandingPage() {
 
     setIsSearching(true);
     axios
-      .get(`${API_BASE_URL}/veterinarians/search?${params.toString()}`)
+      .get(`${API_BASE_URL}/clinics/search?${params.toString()}`)
       .then((res) => {
         const results = uniqueClinics(res.data);
         setClinics(results);
@@ -248,16 +285,17 @@ function LandingPage() {
     navigate("/customer");
   };
 
-  const handleBook = (clinic, serviceId, date, time) => {
+  const handleBook = (clinic, veterinarian, serviceId, date, time) => {
     const selectedService = services.find((s) => String(s.id) === String(serviceId));
     localStorage.setItem(
       "pendingAppointment",
       JSON.stringify({
-        veterinarian_id: clinic.id,
-        veterinarian_name: clinic.full_name,
+        source: "clinic",
+        clinic_id: clinic.id,
+        veterinarian_id: veterinarian?.id,
+        veterinarian_name: veterinarian?.full_name || "",
         clinic_name: clinic.clinic_name,
         city_id: clinic.city_id,
-        city: clinic.city_name || clinic.city,
         district: clinic.district,
         address: clinic.address,
         service_id: Number(serviceId),
@@ -275,7 +313,13 @@ function LandingPage() {
         <Link className="landing-brand" to="/">PatiCare</Link>
         <div className="landing-actions">
           <Link className="ghost-button" to="/clinic-register">Klinik Ekle</Link>
-          <Link className="ghost-button" to="/login">Giriş Yap</Link>
+          <Link
+            className="ghost-button"
+            to="/login"
+            onClick={() => localStorage.removeItem("pendingAppointment")}
+          >
+            Giriş Yap
+          </Link>
         </div>
       </header>
 
@@ -374,3 +418,4 @@ function LandingPage() {
 }
 
 export default LandingPage;
+

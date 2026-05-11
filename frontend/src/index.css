@@ -242,6 +242,10 @@ button {
   width: min(100%, 760px);
 }
 
+.new-city-field {
+  grid-column: 2;
+}
+
 .auth-brand {
   display: inline-flex;
   margin-bottom: 22px;
@@ -445,6 +449,13 @@ button {
   backdrop-filter: blur(16px);
 }
 
+.vet-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -611,6 +622,14 @@ button:disabled {
   color: #0f2f57;
   border: 1px solid #cfe0f3;
   box-shadow: 0 10px 26px rgba(28, 64, 112, 0.08);
+}
+
+.primary-action-button {
+  margin-top: 0;
+  background: linear-gradient(135deg, #2f80ed, #1d6fd4);
+  color: #ffffff;
+  border: 1px solid rgba(47, 128, 237, 0.32);
+  box-shadow: 0 14px 30px rgba(47, 128, 237, 0.24);
 }
 
 .form-error,
@@ -929,6 +948,46 @@ button:disabled {
   margin-bottom: 20px;
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.94);
+}
+
+.clinic-vets-panel {
+  margin-bottom: 20px;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.clinic-vets-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.clinic-vet-card {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid #dbe9f7;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f8fbff, #eff6ff);
+}
+
+.clinic-vet-card h3 {
+  color: #0f172a;
+  font-size: 16px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.clinic-vet-card span {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 850;
 }
 
 .vet-create-form {
@@ -1301,6 +1360,87 @@ button:disabled {
   min-height: auto;
 }
 
+.toast-message {
+  position: fixed;
+  top: 22px;
+  right: 22px;
+  z-index: 50;
+  margin: 0;
+  padding: 13px 16px;
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: 14px;
+  font-weight: 850;
+  box-shadow: 0 18px 40px rgba(28, 64, 112, 0.14);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(15, 23, 42, 0.44);
+  backdrop-filter: blur(8px);
+}
+
+.modal-card {
+  width: min(100%, 540px);
+  padding: 20px;
+  border: 1px solid #d8e4f2;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 28px 72px rgba(15, 47, 87, 0.24);
+}
+
+.modal-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.modal-heading h2 {
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.icon-close-button {
+  width: 38px;
+  min-height: 38px;
+  margin-top: 0;
+  padding: 0;
+  border: 1px solid #dbe9f7;
+  border-radius: 10px;
+  background: #f8fbff;
+  color: #334155;
+  box-shadow: none;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.vet-modal-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.modal-actions button {
+  margin-top: 0;
+}
+
 @media (max-width: 1080px) {
   .dashboard-layout {
     grid-template-columns: 1fr;
@@ -1352,7 +1492,8 @@ button:disabled {
   }
 
   .stats-grid.customer-stats,
-  .vet-content-grid {
+  .vet-content-grid,
+  .clinic-vets-list {
     grid-template-columns: 1fr;
   }
 }
@@ -1400,6 +1541,12 @@ button:disabled {
     display: grid;
   }
 
+  .vet-header-actions,
+  .modal-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
   .customer-topbar {
     display: grid;
     padding: 20px 16px 10px;
@@ -1414,6 +1561,7 @@ button:disabled {
   .stats-grid.vet-stats,
   .stats-grid.customer-stats,
   .vet-appointment-actions,
+  .vet-modal-form,
   .form-grid,
   .selected-appointment-grid,
   .pet-card-grid,
@@ -1426,6 +1574,10 @@ button:disabled {
   .clinic-appt-panel,
   .record-grid {
     grid-template-columns: 1fr;
+  }
+
+  .new-city-field {
+    grid-column: 1;
   }
 
   .panel-form,

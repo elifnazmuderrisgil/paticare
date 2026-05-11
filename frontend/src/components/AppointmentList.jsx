@@ -101,8 +101,7 @@ function makeCurrentClinicOption(appointment) {
     full_name: appointment.veterinarian_name,
     clinic_name: appointment.clinic_name,
     city_id: appointment.veterinarian_city_id,
-    city_name: appointment.veterinarian_city,
-    city: appointment.veterinarian_city,
+    city_name: appointment.city_name,
     district: appointment.veterinarian_district,
     address: appointment.veterinarian_address,
   };
@@ -465,7 +464,7 @@ function AppointmentCard({
         </p>
         <p>
           <span>Şehir / İlçe</span>
-          {appointment.city_name || appointment.veterinarian_city || "-"} /{" "}
+          {appointment.city_name || "-"} /{" "}
           {appointment.district || appointment.veterinarian_district || "-"}
         </p>
         <p>

@@ -4,6 +4,7 @@ import axios from "axios";
 import { useDistrictOptions } from "../api/districts";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
+const NEW_CITY_VALUE = "__new_city__";
 
 const initialFormData = {
   full_name: "",
@@ -12,6 +13,7 @@ const initialFormData = {
   phone: "",
   clinic_name: "",
   city_id: "",
+  city_name: "",
   district: "",
   address: "",
 };
@@ -23,7 +25,8 @@ function ClinicRegisterPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const availableDistricts = useDistrictOptions(formData.city_id);
+  const isAddingNewCity = formData.city_id === NEW_CITY_VALUE;
+  const availableDistricts = useDistrictOptions(isAddingNewCity ? "" : formData.city_id);
 
   useEffect(() => {
     axios
@@ -40,7 +43,12 @@ function ClinicRegisterPage() {
     setFormData((currentFormData) => ({
       ...currentFormData,
       [name]: value,
-      ...(name === "city_id" ? { district: "" } : {}),
+      ...(name === "city_id"
+        ? {
+            district: "",
+            city_name: value === NEW_CITY_VALUE ? currentFormData.city_name : "",
+          }
+        : {}),
     }));
     setError("");
     setSuccessMessage("");
@@ -52,8 +60,14 @@ function ClinicRegisterPage() {
     setSuccessMessage("");
     setIsSubmitting(true);
 
+    const payload = {
+      ...formData,
+      city_id: isAddingNewCity ? null : Number(formData.city_id),
+      city_name: isAddingNewCity ? formData.city_name.trim() : null,
+    };
+
     axios
-      .post(`${API_BASE_URL}/clinics/register`, formData)
+      .post(`${API_BASE_URL}/clinics/register`, payload)
       .then(() => {
         setSuccessMessage("Klinik başarıyla eklendi. Giriş yapabilirsiniz.");
         setFormData(initialFormData);
@@ -135,8 +149,20 @@ function ClinicRegisterPage() {
                   {city.name}
                 </option>
               ))}
+              <option value={NEW_CITY_VALUE}>+ Yeni şehir ekle</option>
             </select>
           </label>
+          {isAddingNewCity && (
+            <label className="new-city-field">
+              Yeni şehir adı
+              <input
+                name="city_name"
+                value={formData.city_name}
+                onChange={handleChange}
+                required
+              />
+            </label>
+          )}
           <label>
             İlçe
             {availableDistricts.length > 0 ? (

@@ -10,7 +10,7 @@ Tüm SQL dosyaları **şema oluşturma**, **veri ekleme** ve **temizleme** gibi 
 **İçerir**:
 - `cities` tablosu oluşturma
 - `veterinarians` tablosuna sütun ekleme:
-  - `clinic_name`, `city`, `district`, `address`
+  - `clinic_name`, `district`, `address`
   - `password`, `city_id`
 
 **Çalıştırma**: İlk kez başlatıldığında
@@ -115,3 +115,4 @@ cat sql/02_cleanup.sql
 | Demo Müşteri | 24 |
 | Demo Pet | 28 |
 | Demo Randevu | 150+ |
+

@@ -44,6 +44,13 @@ const initialNewPet = {
   gender: "",
 };
 
+const initialNewVeterinarian = {
+  full_name: "",
+  email: "",
+  password: "",
+  phone: "",
+};
+
 const initialAppointmentStats = {
   total: 0,
   pending: 0,
@@ -380,6 +387,7 @@ function VeterinarianDashboard() {
   const [appointments, setAppointments] = useState([]);
   const [appointmentStats, setAppointmentStats] = useState(null);
   const [veterinarian, setVeterinarian] = useState(null);
+  const [clinicVeterinarians, setClinicVeterinarians] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [customerPets, setCustomerPets] = useState([]);
   const [services, setServices] = useState([]);
@@ -388,10 +396,14 @@ function VeterinarianDashboard() {
   const [activeAppointmentTab, setActiveAppointmentTab] = useState("active");
   const [newCustomer, setNewCustomer] = useState(initialNewCustomer);
   const [newPet, setNewPet] = useState(initialNewPet);
+  const [newVeterinarian, setNewVeterinarian] = useState(initialNewVeterinarian);
+  const [isVetModalOpen, setIsVetModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreatingAppointment, setIsCreatingAppointment] = useState(false);
+  const [isCreatingVeterinarian, setIsCreatingVeterinarian] = useState(false);
   const [error, setError] = useState("");
   const [createError, setCreateError] = useState("");
+  const [vetCreateError, setVetCreateError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const user = JSON.parse(localStorage.getItem("user"));
   const navigate = useNavigate();
@@ -454,6 +466,16 @@ function VeterinarianDashboard() {
       });
   };
 
+  const fetchClinicVeterinarians = (veterinarianId) => {
+    axios
+      .get(`${API_BASE_URL}/veterinarians/${veterinarianId}/clinic-veterinarians`)
+      .then((response) => setClinicVeterinarians(response.data))
+      .catch((requestError) => {
+        console.error(requestError);
+        setError("Klinik veterinerleri alınırken bir hata oluştu.");
+      });
+  };
+
   const refreshAppointments = (message) => {
     if (message) {
       setSuccessMessage(message);
@@ -467,6 +489,21 @@ function VeterinarianDashboard() {
   const logout = () => {
     localStorage.removeItem("user");
     navigate("/");
+  };
+
+  const openVeterinarianModal = () => {
+    setNewVeterinarian(initialNewVeterinarian);
+    setVetCreateError("");
+    setIsVetModalOpen(true);
+  };
+
+  const closeVeterinarianModal = () => {
+    if (isCreatingVeterinarian) {
+      return;
+    }
+
+    setIsVetModalOpen(false);
+    setVetCreateError("");
   };
 
   const handleAppointmentFormChange = (event) => {
@@ -496,6 +533,15 @@ function VeterinarianDashboard() {
     setCreateError("");
   };
 
+  const handleNewVeterinarianChange = (event) => {
+    const { name, value } = event.target;
+    setNewVeterinarian((currentVeterinarian) => ({
+      ...currentVeterinarian,
+      [name]: value,
+    }));
+    setVetCreateError("");
+  };
+
   const handleRepeatAppointment = (appointment) => {
     setAppointmentForm({
       user_id: appointment.user_id ? String(appointment.user_id) : "",
@@ -509,6 +555,43 @@ function VeterinarianDashboard() {
     setCreateError("");
     setSuccessMessage("");
     createFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const createVeterinarian = (event) => {
+    event.preventDefault();
+    setVetCreateError("");
+    setSuccessMessage("");
+
+    if (!veterinarian?.id) {
+      setVetCreateError("Klinik bilgisi alınamadı.");
+      return;
+    }
+
+    setIsCreatingVeterinarian(true);
+
+    axios
+      .post(`${API_BASE_URL}/veterinarians/create-veterinarian`, {
+        owner_veterinarian_id: Number(veterinarian.id),
+        full_name: newVeterinarian.full_name,
+        email: newVeterinarian.email,
+        password: newVeterinarian.password,
+        phone: newVeterinarian.phone,
+      })
+      .then(() => {
+        setIsVetModalOpen(false);
+        setNewVeterinarian(initialNewVeterinarian);
+        setSuccessMessage("Veteriner başarıyla eklendi.");
+        fetchClinicVeterinarians(veterinarian.id);
+      })
+      .catch((requestError) => {
+        console.error(requestError);
+        setVetCreateError(
+          requestError.response?.data?.detail || "Veteriner eklenirken bir hata oluştu."
+        );
+      })
+      .finally(() => {
+        setIsCreatingVeterinarian(false);
+      });
   };
 
   const createClinicAppointment = async (event) => {
@@ -589,6 +672,7 @@ function VeterinarianDashboard() {
     setVeterinarian(user);
     fetchAppointments(user.id);
     fetchClinicCustomers(user.id);
+    fetchClinicVeterinarians(user.id);
     fetchAppointmentFormData();
   }, [user?.id, user?.role]);
 
@@ -634,6 +718,18 @@ function VeterinarianDashboard() {
       });
   }, [veterinarian?.id, appointmentForm.appointment_date, appointmentForm.appointment_time]);
 
+  useEffect(() => {
+    if (!successMessage) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setSuccessMessage("");
+    }, 3500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [successMessage]);
+
   return (
     <div className="vet-dashboard">
       <main className="vet-main" id="appointments">
@@ -642,13 +738,18 @@ function VeterinarianDashboard() {
             <p className="page-kicker">Hoş geldiniz, {user?.full_name || "Veteriner"}</p>
             <h1>{veterinarian?.clinic_name || "Veteriner Paneli"}</h1>
           </div>
-          <button className="secondary-button" type="button" onClick={logout}>
-            Çıkış Yap
-          </button>
+          <div className="vet-header-actions">
+            <button className="primary-action-button" type="button" onClick={openVeterinarianModal}>
+              Yeni Veteriner Ekle
+            </button>
+            <button className="secondary-button" type="button" onClick={logout}>
+              Çıkış Yap
+            </button>
+          </div>
         </header>
 
         {error && <p className="form-error page-alert">{error}</p>}
-        {successMessage && <p className="form-success page-alert">{successMessage}</p>}
+        {successMessage && <p className="toast-message">{successMessage}</p>}
 
         <section className="stats-grid vet-stats">
           <article className="stat-card">
@@ -667,6 +768,26 @@ function VeterinarianDashboard() {
             <p>İptal</p>
             <strong>{statusCounts.cancelled}</strong>
           </article>
+        </section>
+
+        <section className="panel-card clinic-vets-panel">
+          <div className="panel-heading">
+            <p className="section-label">Klinik Ekibi</p>
+            <h2>Klinik Veterinerleri</h2>
+          </div>
+
+          {clinicVeterinarians.length === 0 ? (
+            <p className="empty-state compact">Henüz veteriner kaydı yok.</p>
+          ) : (
+            <div className="clinic-vets-list">
+              {clinicVeterinarians.map((clinicVeterinarian) => (
+                <article className="clinic-vet-card" key={clinicVeterinarian.id}>
+                  <h3>{clinicVeterinarian.full_name}</h3>
+                  <span>{clinicVeterinarian.phone || "-"}</span>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="panel-card appointment-panel vet-create-panel" ref={createFormRef}>
@@ -925,6 +1046,89 @@ function VeterinarianDashboard() {
           )}
         </section>
       </main>
+
+      {isVetModalOpen && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeVeterinarianModal}>
+          <section
+            className="modal-card vet-modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-veterinarian-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="modal-heading">
+              <div>
+                <p className="section-label">Yeni Veteriner</p>
+                <h2 id="add-veterinarian-title">Kliniğe Veteriner Ekle</h2>
+              </div>
+              <button
+                className="icon-close-button"
+                type="button"
+                onClick={closeVeterinarianModal}
+                aria-label="Modalı kapat"
+              >
+                ×
+              </button>
+            </div>
+
+            <form className="vet-modal-form" onSubmit={createVeterinarian}>
+              <label>
+                Ad Soyad
+                <input
+                  name="full_name"
+                  value={newVeterinarian.full_name}
+                  onChange={handleNewVeterinarianChange}
+                  required
+                />
+              </label>
+              <label>
+                Email
+                <input
+                  type="email"
+                  name="email"
+                  value={newVeterinarian.email}
+                  onChange={handleNewVeterinarianChange}
+                  required
+                />
+              </label>
+              <label>
+                Şifre
+                <input
+                  type="password"
+                  name="password"
+                  value={newVeterinarian.password}
+                  onChange={handleNewVeterinarianChange}
+                  required
+                />
+              </label>
+              <label>
+                Telefon
+                <input
+                  name="phone"
+                  value={newVeterinarian.phone}
+                  onChange={handleNewVeterinarianChange}
+                  required
+                />
+              </label>
+              {vetCreateError && <p className="form-error full-width">{vetCreateError}</p>}
+
+              <div className="modal-actions full-width">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={closeVeterinarianModal}
+                  disabled={isCreatingVeterinarian}
+                >
+                  Vazgeç
+                </button>
+                <button type="submit" disabled={isCreatingVeterinarian}>
+                  {isCreatingVeterinarian ? "Ekleniyor..." : "Veteriner Ekle"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

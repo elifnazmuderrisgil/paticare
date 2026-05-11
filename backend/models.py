@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Date, Time, Numeric
+from sqlalchemy import Column, Integer, String, ForeignKey, Date, Time, Text
 from database import Base
 
 class User(Base):
@@ -27,15 +27,10 @@ class Veterinarian(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     full_name = Column(String)
-    specialty = Column(String)
     phone = Column(String)
     email = Column(String)
     password = Column(String)
-    clinic_name = Column(String)
-    city_id = Column(Integer, ForeignKey("cities.id"))
-    city = Column(String)
-    district = Column(String)
-    address = Column(String)
+    clinic_id = Column(Integer, ForeignKey("clinics.id"))
 
 class City(Base):
     __tablename__ = "cities"
@@ -43,12 +38,20 @@ class City(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
 
+class Clinic(Base):
+    __tablename__ = "clinics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    clinic_name = Column(String, nullable=False)
+    city_id = Column(Integer, ForeignKey("cities.id"))
+    district = Column(String)
+    address = Column(Text)
+
 class Service(Base):
     __tablename__ = "services"
 
     id = Column(Integer, primary_key=True, index=True)
     service_name = Column(String)
-    price = Column(Numeric)
 
 class Appointment(Base):
     __tablename__ = "appointments"
