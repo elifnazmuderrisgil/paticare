@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
+import { useDistrictOptions } from "../api/districts";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
 
@@ -10,17 +11,6 @@ const appointmentTimes = Array.from({ length: 19 }, (_, index) => {
   const minute = String(totalMinutes % 60).padStart(2, "0");
   return `${hour}:${minute}`;
 });
-
-const districtOptions = {
-  İstanbul: ["Kadıköy", "Beşiktaş", "Üsküdar"],
-  Ankara: ["Çankaya", "Keçiören", "Yenimahalle"],
-  İzmir: ["Karşıyaka", "Bornova", "Konak"],
-  Gaziantep: ["Şahinbey", "Şehitkamil", "Nizip"],
-  Mersin: ["Yenişehir", "Mezitli", "Toroslar", "Akdeniz"],
-  Adana: ["Seyhan", "Çukurova", "Yüreğir", "Sarıçam"],
-  Antalya: ["Muratpaşa", "Konyaaltı", "Kepez", "Alanya"],
-  Eskişehir: ["Odunpazarı", "Tepebaşı"],
-};
 
 const initialFilters = {
   city_id: "",
@@ -165,8 +155,7 @@ function LandingPage() {
     routeToAppointment();
   };
 
-  const selectedCity = cities.find((city) => String(city.id) === String(filters.city_id));
-  const availableDistricts = districtOptions[selectedCity?.name] || [];
+  const availableDistricts = useDistrictOptions(filters.city_id);
 
   return (
     <main className="landing-page">

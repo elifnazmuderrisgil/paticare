@@ -1,19 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
+import { useDistrictOptions } from "../api/districts";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
-
-const districtOptions = {
-  İstanbul: ["Kadıköy", "Beşiktaş", "Üsküdar"],
-  Ankara: ["Çankaya", "Keçiören", "Yenimahalle"],
-  İzmir: ["Karşıyaka", "Bornova", "Konak"],
-  Gaziantep: ["Şahinbey", "Şehitkamil", "Nizip"],
-  Mersin: ["Yenişehir", "Mezitli", "Toroslar", "Akdeniz"],
-  Adana: ["Seyhan", "Çukurova", "Yüreğir", "Sarıçam"],
-  Antalya: ["Muratpaşa", "Konyaaltı", "Kepez", "Alanya"],
-  Eskişehir: ["Odunpazarı", "Tepebaşı"],
-};
 
 const initialFormData = {
   full_name: "",
@@ -33,8 +23,7 @@ function ClinicRegisterPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const selectedCity = cities.find((city) => String(city.id) === String(formData.city_id));
-  const availableDistricts = districtOptions[selectedCity?.name] || [];
+  const availableDistricts = useDistrictOptions(formData.city_id);
 
   useEffect(() => {
     axios
@@ -150,20 +139,30 @@ function ClinicRegisterPage() {
           </label>
           <label>
             İlçe
-            <select
-              name="district"
-              value={formData.district}
-              onChange={handleChange}
-              disabled={!formData.city_id}
-              required
-            >
-              <option value="">İlçe seçin</option>
-              {availableDistricts.map((district) => (
-                <option key={district} value={district}>
-                  {district}
-                </option>
-              ))}
-            </select>
+            {availableDistricts.length > 0 ? (
+              <select
+                name="district"
+                value={formData.district}
+                onChange={handleChange}
+                disabled={!formData.city_id}
+                required
+              >
+                <option value="">İlçe seçin</option>
+                {availableDistricts.map((district) => (
+                  <option key={district} value={district}>
+                    {district}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                name="district"
+                value={formData.district}
+                onChange={handleChange}
+                disabled={!formData.city_id}
+                required
+              />
+            )}
           </label>
           <label className="full-width">
             Adres

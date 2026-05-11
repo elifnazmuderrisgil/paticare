@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import PetList from "../components/PetList";
 import AppointmentList from "../components/AppointmentList";
+import { useDistrictOptions } from "../api/districts";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
 
@@ -12,17 +13,6 @@ const appointmentTimes = Array.from({ length: 19 }, (_, index) => {
   const minute = String(totalMinutes % 60).padStart(2, "0");
   return `${hour}:${minute}`;
 });
-
-const districtOptions = {
-  İstanbul: ["Kadıköy", "Beşiktaş", "Üsküdar"],
-  Ankara: ["Çankaya", "Keçiören", "Yenimahalle"],
-  İzmir: ["Karşıyaka", "Bornova", "Konak"],
-  Gaziantep: ["Şahinbey", "Şehitkamil", "Nizip"],
-  Mersin: ["Yenişehir", "Mezitli", "Toroslar", "Akdeniz"],
-  Adana: ["Seyhan", "Çukurova", "Yüreğir", "Sarıçam"],
-  Antalya: ["Muratpaşa", "Konyaaltı", "Kepez", "Alanya"],
-  Eskişehir: ["Odunpazarı", "Tepebaşı"],
-};
 
 const speciesOptions = ["Kedi", "Köpek", "Kuş", "Tavşan", "Hamster", "Diğer"];
 
@@ -149,8 +139,7 @@ function CustomerDashboard() {
   const navigate = useNavigate();
 
   const availableBreeds = breedOptions[newPet.species] || ["Diğer"];
-  const selectedCity = cities.find((city) => String(city.id) === String(appointmentForm.city_id));
-  const availableDistricts = districtOptions[selectedCity?.name] || [];
+  const availableDistricts = useDistrictOptions(appointmentForm.city_id);
 
   const selectedAppointmentDetails = useMemo(() => {
     if (!pendingAppointment) return [];

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { useDistrictOptions } from "../api/districts";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
 const statusOptions = ["Bekliyor", "Onaylandı", "Tamamlandı", "İptal"];
@@ -10,17 +11,6 @@ const appointmentTimes = Array.from({ length: 19 }, (_, index) => {
   const minute = String(totalMinutes % 60).padStart(2, "0");
   return `${hour}:${minute}`;
 });
-
-const districtOptions = {
-  İstanbul: ["Kadıköy", "Beşiktaş", "Üsküdar"],
-  Ankara: ["Çankaya", "Keçiören", "Yenimahalle"],
-  İzmir: ["Karşıyaka", "Bornova", "Konak"],
-  Gaziantep: ["Şahinbey", "Şehitkamil", "Nizip"],
-  Mersin: ["Yenişehir", "Mezitli", "Toroslar", "Akdeniz"],
-  Adana: ["Seyhan", "Çukurova", "Yüreğir", "Sarıçam"],
-  Antalya: ["Muratpaşa", "Konyaaltı", "Kepez", "Alanya"],
-  Eskişehir: ["Odunpazarı", "Tepebaşı"],
-};
 
 function formatTime(value) {
   return value ? value.slice(0, 5) : "-";
@@ -138,8 +128,7 @@ function AppointmentEditForm({
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const selectedCity = cities.find((city) => String(city.id) === String(formData.city_id));
-  const availableDistricts = districtOptions[selectedCity?.name] || [];
+  const availableDistricts = useDistrictOptions(formData.city_id);
 
   const handleChange = (event) => {
     const { name, value } = event.target;

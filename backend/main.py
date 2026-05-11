@@ -1,9 +1,10 @@
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import func, text
 from datetime import date, datetime, time
 from database import engine, get_db
+from email_service import email_service
 import models
 import schemas
 
@@ -56,6 +57,94 @@ def veterinarian_response(veterinarian, city=None):
         "district": veterinarian.district,
         "address": veterinarian.address,
     }
+
+def format_email_date(value):
+    return value.strftime("%d.%m.%Y") if value else "-"
+
+def format_email_time(value):
+    return value.strftime("%H:%M") if value else "-"
+
+def get_clinic_address(veterinarian, city=None):
+    address_parts = [
+        veterinarian.address,
+        veterinarian.district,
+        get_city_name(veterinarian, city),
+    ]
+    return ", ".join(part for part in address_parts if part) or "-"
+
+def get_appointment_email_context(db: Session, appointment_id: int):
+    return (
+        db.query(
+            models.Appointment,
+            models.Pet,
+            models.Service,
+            models.Veterinarian,
+            models.User,
+            models.City,
+        )
+        .outerjoin(models.Pet, models.Appointment.pet_id == models.Pet.id)
+        .outerjoin(models.Service, models.Appointment.service_id == models.Service.id)
+        .outerjoin(
+            models.Veterinarian,
+            models.Appointment.veterinarian_id == models.Veterinarian.id,
+        )
+        .outerjoin(models.User, models.Appointment.user_id == models.User.id)
+        .outerjoin(models.City, models.Veterinarian.city_id == models.City.id)
+        .filter(models.Appointment.id == appointment_id)
+        .first()
+    )
+
+def send_new_appointment_notification(db: Session, appointment_id: int):
+    context = get_appointment_email_context(db, appointment_id)
+    if not context:
+        return
+
+    appointment, pet, service, veterinarian, user, _ = context
+    if not veterinarian or not veterinarian.email or not user or not pet:
+        return
+
+    email_service.veterinarian_appointment_notification_email(
+        veterinarian_name=veterinarian.full_name or "Veteriner",
+        veterinarian_email=veterinarian.email,
+        customer_name=user.full_name or "-",
+        customer_phone=user.phone or "-",
+        pet_name=pet.name or "-",
+        pet_species=pet.species or "-",
+        appointment_date=format_email_date(appointment.appointment_date),
+        appointment_time=format_email_time(appointment.appointment_time),
+        service_name=service.service_name if service else "-",
+    )
+
+def send_appointment_status_email(db: Session, appointment_id: int, status: str):
+    context = get_appointment_email_context(db, appointment_id)
+    if not context:
+        return
+
+    appointment, pet, service, veterinarian, user, city = context
+    if not user or not user.email or not veterinarian:
+        return
+
+    if status == "Onaylandı":
+        email_service.appointment_confirmation_email(
+            customer_name=user.full_name or "PatiCare kullanıcısı",
+            customer_email=user.email,
+            veterinarian_name=veterinarian.full_name or "-",
+            clinic_name=veterinarian.clinic_name or "-",
+            appointment_date=format_email_date(appointment.appointment_date),
+            appointment_time=format_email_time(appointment.appointment_time),
+            pet_name=pet.name if pet else "-",
+            service_name=service.service_name if service else "-",
+            clinic_address=get_clinic_address(veterinarian, city),
+        )
+    elif status == "İptal":
+        email_service.appointment_cancelled_email(
+            customer_name=user.full_name or "PatiCare kullanıcısı",
+            customer_email=user.email,
+            veterinarian_name=veterinarian.full_name or "-",
+            clinic_name=veterinarian.clinic_name or "-",
+            appointment_date=format_email_date(appointment.appointment_date),
+            appointment_time=format_email_time(appointment.appointment_time),
+        )
 
 def appointment_detail_rows(query):
     rows = query.all()
@@ -419,6 +508,35 @@ def get_veterinarians(db: Session = Depends(get_db)):
     )
     return [veterinarian_response(veterinarian, city) for veterinarian, city in rows]
 
+@app.get("/veterinarians/districts")
+def get_veterinarian_districts(
+    city_id: int | None = None,
+    city: str | None = None,
+    db: Session = Depends(get_db),
+):
+    query = (
+        db.query(models.Veterinarian.district)
+        .outerjoin(models.City, models.Veterinarian.city_id == models.City.id)
+        .filter(models.Veterinarian.district.isnot(None))
+    )
+
+    if city_id:
+        query = query.filter(models.Veterinarian.city_id == city_id)
+    elif city:
+        city_value = city.strip()
+        query = query.filter(
+            (func.lower(models.City.name) == city_value.lower())
+            | (func.lower(models.Veterinarian.city) == city_value.lower())
+        )
+
+    districts = {
+        district.strip()
+        for (district,) in query.all()
+        if district and district.strip()
+    }
+
+    return sorted(districts, key=lambda value: value.casefold())
+
 @app.get("/veterinarians/by-email/{email}", response_model=schemas.VeterinarianResponse)
 def get_veterinarian_by_email(email: str, db: Session = Depends(get_db)):
     row = (
@@ -469,10 +587,25 @@ def search_veterinarians(
     if city_id:
         query = query.filter(models.Veterinarian.city_id == city_id)
     elif city:
-        query = query.filter(models.Veterinarian.city == city)
+        city_value = city.strip()
+        query = query.filter(
+            (func.lower(models.City.name) == city_value.lower())
+            | (func.lower(models.Veterinarian.city) == city_value.lower())
+        )
 
     if district:
-        query = query.filter(models.Veterinarian.district == district)
+        query = query.filter(
+            func.lower(models.Veterinarian.district) == district.strip().lower()
+        )
+
+    if service_id:
+        service_exists = (
+            db.query(models.Service.id)
+            .filter(models.Service.id == service_id)
+            .first()
+        )
+        if not service_exists:
+            raise HTTPException(status_code=404, detail="Hizmet bulunamadı.")
 
     if appointment_date and appointment_time:
         booked_veterinarian_ids = (
@@ -567,6 +700,7 @@ def create_appointment(
     db.add(new_appointment)
     db.commit()
     db.refresh(new_appointment)
+    send_new_appointment_notification(db, new_appointment.id)
 
     return new_appointment
 
@@ -699,9 +833,13 @@ def update_appointment_status(
 
     validate_appointment_status_transition(appointment.status, status_update.status)
 
+    previous_status = appointment.status
     appointment.status = status_update.status
     db.commit()
     db.refresh(appointment)
+
+    if previous_status != appointment.status:
+        send_appointment_status_email(db, appointment.id, appointment.status)
 
     return appointment
 
@@ -780,10 +918,15 @@ def update_appointment(
                 detail="Bu saat için seçilen klinikte randevu dolu.",
             )
 
+    previous_status = appointment.status
+
     for field, value in update_data.items():
         setattr(appointment, field, value)
 
     db.commit()
     db.refresh(appointment)
+
+    if "status" in update_data and previous_status != appointment.status:
+        send_appointment_status_email(db, appointment.id, appointment.status)
 
     return appointment
