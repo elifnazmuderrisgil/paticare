@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useDistrictOptions } from "../api/districts";
@@ -12,14 +12,6 @@ const appointmentTimes = Array.from({ length: 19 }, (_, index) => {
   return `${hour}:${minute}`;
 });
 
-const initialFilters = {
-  city_id: "",
-  district: "",
-  service_id: "",
-  appointment_date: "",
-  appointment_time: "",
-};
-
 function getTodayDateString() {
   const today = new Date();
   const timezoneOffset = today.getTimezoneOffset() * 60000;
@@ -28,114 +20,236 @@ function getTodayDateString() {
 
 function uniqueClinics(clinics) {
   const seen = new Set();
-
   return clinics.filter((clinic) => {
-    const key = (clinic.email || clinic.full_name || clinic.id).toString().toLocaleLowerCase("tr-TR");
-
-    if (seen.has(key)) {
-      return false;
-    }
-
+    const key = (clinic.email || clinic.full_name || clinic.id)
+      .toString()
+      .toLocaleLowerCase("tr-TR");
+    if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
 }
 
+// ── Per-clinic appointment panel ────────────────────────────────────────────
+function ClinicAppointmentPanel({ clinic, services, onBook }) {
+  const [serviceId, setServiceId] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [availableTimes, setAvailableTimes] = useState(null); // null = not loaded yet
+  const [loadingTimes, setLoadingTimes] = useState(false);
+  const [error, setError] = useState("");
+
+  // Fetch busy/available times whenever date changes
+  useEffect(() => {
+    if (!date) {
+      setAvailableTimes(null);
+      setTime("");
+      return;
+    }
+    setLoadingTimes(true);
+    setTime("");
+    axios
+      .get(`${API_BASE_URL}/veterinarians/${clinic.id}/available-times?date=${date}`)
+      .then((res) => setAvailableTimes(res.data))
+      .catch(() => setAvailableTimes(null))
+      .finally(() => setLoadingTimes(false));
+  }, [date, clinic.id]);
+
+  const handleBook = () => {
+    if (!serviceId || !date || !time) {
+      setError("Lütfen hizmet, tarih ve saat seçin.");
+      return;
+    }
+    setError("");
+    onBook(clinic, serviceId, date, time);
+  };
+
+  const isTimeAvailable = (t) => {
+    if (!availableTimes) return true; // optimistic before load
+    const slot = availableTimes.find((s) => s.time === t);
+    return slot ? slot.available : true;
+  };
+
+  return (
+    <div className="clinic-appt-panel">
+      {/* Service */}
+      <label className="clinic-appt-label">
+        <span>Hizmet</span>
+        <select
+          value={serviceId}
+          onChange={(e) => { setServiceId(e.target.value); setError(""); }}
+          className="clinic-appt-select"
+        >
+          <option value="">Hizmet seçin</option>
+          {services.map((s) => (
+            <option key={s.id} value={s.id}>{s.service_name}</option>
+          ))}
+        </select>
+      </label>
+
+      {/* Date */}
+      <label className="clinic-appt-label">
+        <span>Tarih</span>
+        <input
+          type="date"
+          min={getTodayDateString()}
+          value={date}
+          onChange={(e) => { setDate(e.target.value); setError(""); }}
+          className="clinic-appt-select"
+        />
+      </label>
+
+      {/* Time */}
+      <label className="clinic-appt-label">
+        <span>
+          Saat{loadingTimes && <em className="loading-hint"> yükleniyor…</em>}
+        </span>
+        <select
+          value={time}
+          onChange={(e) => { setTime(e.target.value); setError(""); }}
+          disabled={!date || loadingTimes}
+          className="clinic-appt-select"
+        >
+          <option value="">Saat seçin</option>
+          {appointmentTimes.map((t) => {
+            const ok = isTimeAvailable(t);
+            return (
+              <option key={t} value={t} disabled={!ok}>
+                {t}{!ok ? " — Dolu" : ""}
+              </option>
+            );
+          })}
+        </select>
+      </label>
+
+      {error && <p className="clinic-appt-error">{error}</p>}
+
+      <button type="button" className="clinic-book-btn" onClick={handleBook}>
+        Randevu Al
+      </button>
+    </div>
+  );
+}
+
+// ── Clinic card ──────────────────────────────────────────────────────────────
+function ClinicCard({ clinic, services, onBook }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <article className="clinic-card-v2">
+      <div className="clinic-card-top">
+        <div className="clinic-avatar">
+          {(clinic.clinic_name || clinic.full_name || "K")[0].toUpperCase()}
+        </div>
+        <div className="clinic-card-info">
+          <h3>{clinic.clinic_name || clinic.full_name}</h3>
+          <p className="clinic-card-sub">{clinic.full_name}</p>
+          <p className="clinic-card-location">
+            📍 {clinic.city_name || clinic.city || "—"} / {clinic.district || "—"}
+          </p>
+          {clinic.address && (
+            <p className="clinic-card-address">{clinic.address}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="clinic-card-footer">
+        <button
+          type="button"
+          className={`clinic-toggle-btn ${open ? "open" : ""}`}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? "Kapat ✕" : "Randevu Al →"}
+        </button>
+      </div>
+
+      {open && (
+        <ClinicAppointmentPanel
+          clinic={clinic}
+          services={services}
+          onBook={onBook}
+        />
+      )}
+    </article>
+  );
+}
+
+// ── Main page ────────────────────────────────────────────────────────────────
 function LandingPage() {
-  const [filters, setFilters] = useState(initialFilters);
+  const [cityId, setCityId] = useState("");
+  const [district, setDistrict] = useState("");
   const [cities, setCities] = useState([]);
   const [services, setServices] = useState([]);
   const [clinics, setClinics] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [searched, setSearched] = useState(false);
   const [searchMessage, setSearchMessage] = useState("");
+  const clinicsRef = useRef(null);
   const navigate = useNavigate();
 
+  const availableDistricts = useDistrictOptions(cityId);
+
+  // Load cities + services once
   useEffect(() => {
     Promise.all([
       axios.get(`${API_BASE_URL}/cities`),
       axios.get(`${API_BASE_URL}/services`),
     ])
-      .then(([citiesResponse, servicesResponse]) => {
-        setCities(citiesResponse.data);
-        setServices(servicesResponse.data);
+      .then(([citiesRes, servicesRes]) => {
+        setCities(citiesRes.data);
+        setServices(servicesRes.data);
       })
-      .catch((error) => {
-        console.error(error);
-        setSearchMessage("Şehir veya hizmet listesi alınırken bir hata oluştu.");
-      });
+      .catch(() => {});
   }, []);
 
-  const routeToAppointment = () => {
-    const storedUser = localStorage.getItem("user");
-
-    if (!storedUser) {
-      navigate("/login");
-      return;
-    }
-
-    navigate("/customer");
-  };
-
-  const handleAppointmentClick = () => {
-    localStorage.removeItem("pendingAppointment");
-    routeToAppointment();
-  };
-
-  const handleFilterChange = (event) => {
-    const { name, value } = event.target;
-    setFilters((currentFilters) => ({
-      ...currentFilters,
-      [name]: value,
-      ...(name === "city_id" ? { district: "" } : {}),
-    }));
+  const handleCityChange = (e) => {
+    setCityId(e.target.value);
+    setDistrict("");
     setSearchMessage("");
   };
 
-  const handleSearch = (event) => {
-    event.preventDefault();
+  const handleSearch = (e) => {
+    e.preventDefault();
     setSearchMessage("");
 
-    if (!filters.city_id || !filters.service_id || !filters.appointment_date || !filters.appointment_time) {
-      setSearchMessage("Klinik aramak için şehir, hizmet, tarih ve saat seçin.");
+    if (!cityId) {
+      setSearchMessage("Klinik aramak için şehir seçin.");
       return;
     }
 
-    if (filters.appointment_date < getTodayDateString()) {
-      setSearchMessage("Geçmiş tarihe randevu alınamaz.");
-      return;
-    }
-
-    const params = new URLSearchParams();
-    Object.entries(filters).forEach(([key, value]) => {
-      if (value) {
-        params.append(key, value);
-      }
-    });
+    const params = new URLSearchParams({ city_id: cityId });
+    if (district) params.append("district", district);
 
     setIsSearching(true);
     axios
       .get(`${API_BASE_URL}/veterinarians/search?${params.toString()}`)
-      .then((response) => {
-        const results = uniqueClinics(response.data);
+      .then((res) => {
+        const results = uniqueClinics(res.data);
         setClinics(results);
+        setSearched(true);
         if (results.length === 0) {
           setSearchMessage("Bu filtrelere uygun klinik bulunamadı.");
+        } else {
+          setTimeout(() => {
+            clinicsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }, 80);
         }
       })
-      .catch((error) => {
-        console.error(error);
-        setSearchMessage("Klinikler listelenirken bir hata oluştu.");
-      })
-      .finally(() => {
-        setIsSearching(false);
-      });
+      .catch(() => setSearchMessage("Klinikler listelenirken bir hata oluştu."))
+      .finally(() => setIsSearching(false));
   };
 
-  const handleClinicAppointment = (clinic) => {
-    const selectedService = services.find(
-      (service) => String(service.id) === String(filters.service_id)
-    );
+  const routeToAppointment = () => {
+    const storedUser = localStorage.getItem("user");
+    if (!storedUser) {
+      navigate("/login");
+      return;
+    }
+    navigate("/customer");
+  };
 
+  const handleBook = (clinic, serviceId, date, time) => {
+    const selectedService = services.find((s) => String(s.id) === String(serviceId));
     localStorage.setItem(
       "pendingAppointment",
       JSON.stringify({
@@ -146,46 +260,45 @@ function LandingPage() {
         city: clinic.city_name || clinic.city,
         district: clinic.district,
         address: clinic.address,
-        service_id: Number(filters.service_id),
+        service_id: Number(serviceId),
         service_name: selectedService?.service_name || "",
-        appointment_date: filters.appointment_date,
-        appointment_time: filters.appointment_time,
+        appointment_date: date,
+        appointment_time: time,
       })
     );
     routeToAppointment();
   };
 
-  const availableDistricts = useDistrictOptions(filters.city_id);
-
   return (
     <main className="landing-page">
       <header className="landing-nav">
-        <Link className="landing-brand" to="/">
-          PatiCare
-        </Link>
+        <Link className="landing-brand" to="/">PatiCare</Link>
         <div className="landing-actions">
-          <Link className="ghost-button" to="/clinic-register">
-            Klinik Ekle
-          </Link>
-          <Link className="ghost-button" to="/login">
-          Giriş Yap
-          </Link>
+          <Link className="ghost-button" to="/clinic-register">Klinik Ekle</Link>
+          <Link className="ghost-button" to="/login">Giriş Yap</Link>
         </div>
       </header>
 
+      {/* Hero */}
       <section className="hero-section">
         <div className="hero-content">
           <p className="eyebrow">Modern veteriner kliniği deneyimi</p>
           <h1>PatiCare</h1>
-          <p>
-            Hayvanlarınızı, randevularınızı ve klinik süreçlerinizi tek panelden yönetin.
-          </p>
-          <button className="hero-button" type="button" onClick={handleAppointmentClick}>
+          <p>Hayvanlarınızı, randevularınızı ve klinik süreçlerinizi tek panelden yönetin.</p>
+          <button
+            className="hero-button"
+            type="button"
+            onClick={() => {
+              localStorage.removeItem("pendingAppointment");
+              routeToAppointment();
+            }}
+          >
             Randevu Oluştur
           </button>
         </div>
       </section>
 
+      {/* Search section */}
       <section className="clinic-search-section">
         <div className="clinic-search-inner">
           <div className="clinic-search-heading">
@@ -194,15 +307,13 @@ function LandingPage() {
           </div>
 
           <form className="landing-search-card" onSubmit={handleSearch}>
-            <div className="form-grid filter-grid">
+            <div className="form-grid landing-filter-grid">
               <label>
                 Şehir
-                <select name="city_id" value={filters.city_id} onChange={handleFilterChange} required>
+                <select name="city_id" value={cityId} onChange={handleCityChange} required>
                   <option value="">Şehir seçin</option>
                   {cities.map((city) => (
-                    <option key={city.id} value={city.id}>
-                      {city.name}
-                    </option>
+                    <option key={city.id} value={city.id}>{city.name}</option>
                   ))}
                 </select>
               </label>
@@ -211,56 +322,13 @@ function LandingPage() {
                 İlçe
                 <select
                   name="district"
-                  value={filters.district}
-                  onChange={handleFilterChange}
-                  disabled={!filters.city_id}
+                  value={district}
+                  onChange={(e) => { setDistrict(e.target.value); setSearchMessage(""); }}
+                  disabled={!cityId}
                 >
                   <option value="">Tüm ilçeler</option>
-                  {availableDistricts.map((district) => (
-                    <option key={district} value={district}>
-                      {district}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                Hizmet
-                <select name="service_id" value={filters.service_id} onChange={handleFilterChange} required>
-                  <option value="">Hizmet seçin</option>
-                  {services.map((service) => (
-                    <option key={service.id} value={service.id}>
-                      {service.service_name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                Tarih
-                <input
-                  type="date"
-                  name="appointment_date"
-                  value={filters.appointment_date}
-                  min={getTodayDateString()}
-                  onChange={handleFilterChange}
-                  required
-                />
-              </label>
-
-              <label>
-                Saat
-                <select
-                  name="appointment_time"
-                  value={filters.appointment_time}
-                  onChange={handleFilterChange}
-                  required
-                >
-                  <option value="">Saat seçin</option>
-                  {appointmentTimes.map((time) => (
-                    <option key={time} value={time}>
-                      {time}
-                    </option>
+                  {availableDistricts.map((d) => (
+                    <option key={d} value={d}>{d}</option>
                   ))}
                 </select>
               </label>
@@ -268,30 +336,35 @@ function LandingPage() {
 
             {searchMessage && <p className="form-error">{searchMessage}</p>}
 
-            <button type="submit" disabled={isSearching}>
-              {isSearching ? "Aranıyor..." : "Klinik Ara"}
+            <button type="submit" disabled={isSearching} className="search-submit-btn">
+              {isSearching ? "Aranıyor…" : "Klinik Ara"}
             </button>
           </form>
 
-          {clinics.length > 0 && (
-            <div className="landing-clinic-list">
-              {clinics.map((clinic) => (
-                <article className="clinic-card" key={clinic.id}>
-                  <div>
-                    <h3>{clinic.clinic_name || clinic.full_name}</h3>
-                    <p>{clinic.full_name}</p>
-                    <p>{clinic.city_name || clinic.city || "-"} / {clinic.district || "-"}</p>
-                    <p>{clinic.address || "Adres bilgisi yok."}</p>
+          {/* Results */}
+          {searched && (
+            <div ref={clinicsRef} className="clinic-results-section">
+              {clinics.length > 0 ? (
+                <>
+                  <p className="clinic-results-count">
+                    <strong>{clinics.length}</strong> klinik bulundu — randevu almak için bir klinik seçin
+                  </p>
+                  <div className="landing-clinic-list-v2">
+                    {clinics.map((clinic) => (
+                      <ClinicCard
+                        key={clinic.id}
+                        clinic={clinic}
+                        services={services}
+                        onBook={handleBook}
+                      />
+                    ))}
                   </div>
-                  <button
-                    className="compact-button"
-                    type="button"
-                    onClick={() => handleClinicAppointment(clinic)}
-                  >
-                    Bu Kliniğe Randevu Al
-                  </button>
-                </article>
-              ))}
+                </>
+              ) : (
+                !searchMessage && (
+                  <p className="clinic-results-count">Sonuç bulunamadı.</p>
+                )
+              )}
             </div>
           )}
         </div>
